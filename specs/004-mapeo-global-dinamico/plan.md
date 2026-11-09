@@ -109,8 +109,11 @@ Referencias de decisiones: §2 (D1-D3) y §12 (D-01…D-05) de la spec.
   de trabajo de 250 m entra en pantalla y los POIs de 217/239 m se pintan. El buffer GL
   se reutiliza (spec 002 RF-02). En POCO: 619→676 celdas pintadas (antes 13), 605 de
   calle, 12 de amenity, 1 de comercio y 70 de nodo de ruta (antes 3), a 59,7 fps.
-  Pendiente: cubrir también los diagonales del corredor (hoy el fetch llega a ~208 m en
-  diagonal y a ~270 m en los ejes).
+  Follow-up 2026-11-09: diagonales cubiertas (9 centros: ancla + 4 cardinales + 4
+  diagonales a spanM; alcance ~270 m también en diagonal, antes ~208 m). Clave de
+  caché nueva `corr9_` (las entradas viejas `corr_` de 5 centros no se reutilizan).
+  Host `OsmClassifyHostTest` 55 comprobaciones (19 nuevas de geometría del corredor).
+  `BUILD_TAG 2026-11-09+spec004-corredor-diagonal`. Verificación en POCO pendiente.
 
 ### Slice 3 — Doble validación en modo lectura
 

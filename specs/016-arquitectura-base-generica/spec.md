@@ -1,6 +1,6 @@
 # spec.md — 016 Arquitectura base genérica del emulador
 
-Estado: BORRADOR — requiere APROBADO antes de plan.md / código.
+Estado: APROBADO — aprobado por Miguel el 9 de noviembre de 2026.
 
 ## 1. Objetivo
 Establecer una arquitectura base genérica y agnóstica a los datos del juego original del usuario para el emulador del modo retro de 8 bits y del modo a color. El emulador debe exponer una API pública de estado genérico (`BOOT`, `INTRO`, `MAP`, `BATTLE`, `MENU`, `PAUSE`) sin leer direcciones de memoria específicas de una sola partida (como `0xDCB5` del juego del usuario). Toda comunicación entre el emulador y la UI debe ser por eventos de estado genéricos, no por offsets hardcodeados.
