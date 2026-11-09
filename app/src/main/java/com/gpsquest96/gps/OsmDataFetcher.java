@@ -127,15 +127,19 @@ public class OsmDataFetcher {
 
     /**
      * Consulta por corredor (spec 004 §9): una unión de áreas a lo largo del tramo
-     * (ancla + 4 cardinales) en lugar de un único círculo. Sirve para no perder POIs
-     * al avanzar y para que el conjunto acumulado crezca sin saltos.
+     * (ancla + 4 cardinales + 4 diagonales) en lugar de un único círculo. Sirve
+     * para no perder POIs al avanzar y para que el conjunto acumulado crezca sin
+     * saltos. Las diagonales cubren el hueco de ~208 m (antes) hasta ~270 m,
+     * igual que los ejes (follow-up 2026-11-09).
      */
     public void requestCorridor(final double lat, final double lon,
             final double radiusM, final double spanM) {
-        final String key = String.format(Locale.ROOT, "corr_%.5f_%.5f_%d_%d",
+        // Clave nueva (corr9_): el corredor ya tiene 9 centros. Las entradas
+        // viejas `corr_` (5 centros) NO se reutilizan como legacy: servirian
+        // datos recortados a 208 m en diagonal hasta 7 dias (TTL de disco).
+        final String key = String.format(Locale.ROOT, "corr9_%.5f_%.5f_%d_%d",
                 lat, lon, (int) radiusM, (int) spanM);
-        final String legacy = String.format(Locale.ROOT, "corr_%.3f_%.3f_%d_%d",
-                lat, lon, (int) radiusM, (int) spanM);
+        final String legacy = null;
         final double[][] points = corridorPoints(lat, lon, spanM);
         final String query = buildCorridorQuery(lat, lon, radiusM, spanM);
         request(key, legacy, query, lat, lon, points, radiusM);
@@ -255,7 +259,8 @@ public class OsmDataFetcher {
 
     /**
      * Query de corredor: repite la unión de claves para cada punto del tramo
-     * (ancla + 4 cardinales). Overpass devuelve la unión deduplicada por id.
+     * (ancla + 4 cardinales + 4 diagonales). Overpass devuelve la unión
+     * deduplicada por id.
      */
     static String buildCorridorQuery(double lat, double lon,
             double radiusM, double spanM) {
@@ -268,14 +273,18 @@ public class OsmDataFetcher {
         return sb.toString();
     }
 
-    /** Centros del corredor: ancla + 4 cardinales (mismo orden que la query). */
+    /** Centros del corredor: ancla + 4 cardinales + 4 diagonales. */
     private static double[][] corridorPoints(double lat, double lon, double spanM) {
         return new double[][] {
                 {lat, lon},
                 offset(lat, lon, spanM, 0.0),
                 offset(lat, lon, spanM, 90.0),
                 offset(lat, lon, spanM, 180.0),
-                offset(lat, lon, spanM, 270.0)
+                offset(lat, lon, spanM, 270.0),
+                offset(lat, lon, spanM, 45.0),
+                offset(lat, lon, spanM, 135.0),
+                offset(lat, lon, spanM, 225.0),
+                offset(lat, lon, spanM, 315.0)
         };
     }
 

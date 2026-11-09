@@ -18,7 +18,7 @@
 // Huella del Ã¡rbol compilado: se imprime en cada nativeOpenRom para saber
 // en POCO EXACTAMENTE quÃ© cÃ³digo corre (fin de los "APK rancio" ambiguos).
 // Formato: fecha + slices incluidos. Actualizar al tocar el core.
-#define BUILD_TAG "2026-11-08+spec004-mapa"
+#define BUILD_TAG "2026-11-09+spec004-corredor-diagonal"
 
 // Instancia global del cargador (simplificado para esta fase)
 static gpsquest96::RomLoader g_romLoader;
