@@ -61,6 +61,10 @@ public class GameEngine {
     // Estado del juego (volatile: UI escribe, EmuLoop lee).
     private volatile boolean isRunning = false;
     private volatile boolean isPaused = false;
+
+    // Estado actual del emulador (spec 016, slice 3). Volatile: lo escribe
+    // el hilo de emulacion y lo lee la UI.
+    private volatile EmulatorState currentState = EmulatorState.BOOT;
     private int[] eventFlags = new int[256]; // Variables de progreso (RULES.md Ã‚Â§4)
 
     // RULES.md Ã‚Â§6: throttle de clima (la bomba de frames corre a 4fps;
@@ -80,6 +84,34 @@ public class GameEngine {
         void onStatusAlert();
         void onSaveCompleted();
         void onWildEncounter(int species, int level, int mapGroup, int mapNumber);
+
+        /**
+         * Spec 016, slice 3: el estado del emulador cambio. Metodo default
+         * para que los implementadores existentes sigan compilando; el
+         * slice 4 lo implementa en MainActivity con la reaccion de UI.
+         */
+        default void onEmulatorStateChanged(EmulatorState newState) {
+        }
+    }
+
+    /**
+     * Estado generico del emulador (spec 016, slice 3). Los valores coinciden
+     * con el enum nativo de la PPU (BOOT=0, INTRO=1, MAP=2, BATTLE=3,
+     * MENU=4, PAUSE=5); -1 o desconocido se mapea a BOOT (aun no arrancado).
+     */
+    public enum EmulatorState {
+        BOOT, INTRO, MAP, BATTLE, MENU, PAUSE;
+
+        public static EmulatorState fromInt(int value) {
+            switch (value) {
+                case 1: return INTRO;
+                case 2: return MAP;
+                case 3: return BATTLE;
+                case 4: return MENU;
+                case 5: return PAUSE;
+                default: return BOOT;
+            }
+        }
     }
 
     public GameEngine(Context context) {
@@ -265,6 +297,9 @@ public class GameEngine {
         // textura PPU pulsaba contra el refresco GL (titileo azul).
         emulationPipeline.getCpu().stepFrame();
 
+        // Spec 016, slice 3: sondear el estado del emulador una vez por frame.
+        checkEmulatorState();
+
         // Actualizar clima periÃƒÂ³dicamente
         updateWeather();
 
@@ -274,6 +309,34 @@ public class GameEngine {
         playerLoc.setLatitude(coords[0]);
         playerLoc.setLongitude(coords[1]);
         geofenceManager.updatePlayerLocation(playerLoc, eventFlags);
+    }
+
+    /**
+     * Spec 016, slice 3: sondea el estado del emulador una vez por frame y
+     * avisa al listener solo cuando cambia. Corre en el hilo de emulacion;
+     * la notificacion se publica en el hilo principal porque la UI
+     * (applyViewMode) no es segura fuera de el.
+     */
+    private void checkEmulatorState() {
+        if (emulatorBridge == null) return;
+        final EmulatorState next = EmulatorState.fromInt(emulatorBridge.getEmulatorState());
+        if (next == currentState) return;
+        currentState = next;
+        if (listener != null) {
+            mainHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (listener != null) {
+                        listener.onEmulatorStateChanged(next);
+                    }
+                }
+            });
+        }
+    }
+
+    /** Estado actual del emulador (spec 016, slice 3). */
+    public EmulatorState getCurrentEmulatorState() {
+        return currentState;
     }
 
     private final java.util.Random random = new java.util.Random();

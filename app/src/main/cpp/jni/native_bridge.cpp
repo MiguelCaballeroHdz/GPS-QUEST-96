@@ -18,7 +18,7 @@
 // Huella del Ã¡rbol compilado: se imprime en cada nativeOpenRom para saber
 // en POCO EXACTAMENTE quÃ© cÃ³digo corre (fin de los "APK rancio" ambiguos).
 // Formato: fecha + slices incluidos. Actualizar al tocar el core.
-#define BUILD_TAG "2026-11-08+spec004-mapa"
+#define BUILD_TAG "2026-11-09+spec016-slice3"
 
 // Instancia global del cargador (simplificado para esta fase)
 static gpsquest96::RomLoader g_romLoader;
@@ -407,6 +407,24 @@ Java_com_gpsquest96_emulator_EmulatorBridge_nativeGetCurrentMap(
     env->SetIntArrayRegion(result, 0, 4, values);
     LOGI("B2 mapa actual %d/%d (y=%d x=%d)", group, map, y, x);
     return result;
+}
+
+/**
+ * Estado actual del emulador (spec 016, slice 3).
+ * Lee el estado generico detectado por la PPU desde registros de hardware
+ * (LCDC, STAT, SCX, SCY, WY, WX), sin direcciones de una partida concreta.
+ * Devuelve el valor de EmulatorState (BOOT=0, INTRO=1, MAP=2, BATTLE=3,
+ * MENU=4, PAUSE=5) o -1 si el PPU aun no existe.
+ */
+JNIEXPORT jint JNICALL
+Java_com_gpsquest96_emulator_EmulatorBridge_nativeGetEmulatorState(
+        JNIEnv* /* env */,
+        jobject /* thiz */) {
+
+    if (g_ppu == nullptr) {
+        return -1;
+    }
+    return static_cast<jint>(g_ppu->getEmulatorState());
 }
 
 JNIEXPORT void JNICALL

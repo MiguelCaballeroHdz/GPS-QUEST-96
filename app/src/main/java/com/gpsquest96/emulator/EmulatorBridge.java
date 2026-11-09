@@ -190,6 +190,24 @@ public class EmulatorBridge {
         }
     }
 
+    /**
+     * Estado actual del emulador (spec 016, slice 3).
+     *
+     * @return valor de EmulatorState (BOOT=0, INTRO=1, MAP=2, BATTLE=3,
+     *         MENU=4, PAUSE=5) o -1 si el PPU aun no existe.
+     */
+    public native int nativeGetEmulatorState();
+
+    /** Wrapper tolerante: nunca crashea la UI si el .so no tiene la funcion. */
+    public int getEmulatorState() {
+        try {
+            return nativeGetEmulatorState();
+        } catch (Throwable t) {
+            Log.w(TAG, "Estado del emulador no disponible", t);
+            return -1;
+        }
+    }
+
     /** Wrapper tolerante: nunca crashea la UI si el .so no tiene la funciÃ³n. */
     public int[] getWildTable(int group, int map, int kind) {
         try {
