@@ -2958,6 +2958,26 @@ public class MainActivity extends Activity implements SensorEventListener {
                 }
             });
         }
+
+        @Override
+        public void onEmulatorStateChanged(final GameEngine.EmulatorState newState) {
+            // Spec 016, slice 4: la UI reacciona sola al estado del emulador.
+            // Ya llega en el hilo principal (GameEngine lo publica ahi).
+            // BATTLE -> pantalla completa; MAP -> mapa real; INTRO/BOOT no
+            // abren el mapa aun; MENU/PAUSE no cambian la vista.
+            if (newState == null) return;
+            Log.i("GameEngine", "016 estado emulador: " + newState);
+            switch (newState) {
+                case BATTLE:
+                    applyViewMode(true);
+                    break;
+                case MAP:
+                    applyViewMode(false);
+                    break;
+                default:
+                    break;
+            }
+        }
     };
 
     @Override
