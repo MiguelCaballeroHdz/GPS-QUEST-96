@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Paleta de colores de GPS Quest '96 -->
+    <color name="gb_green_light">#9BBC0F</color>
+    <color name="gb_green">#8BAC0F</color>
+    <color name="gb_green_dark">#306230</color>
+    <color name="gb_green_darkest">#0F380F</color>
+
+    <color name="primary">#4A7A3A</color>
+    <color name="primary_dark">#2E5A1E</color>
+    <color name="accent">#8BAC0F</color>
+
+    <color name="black">#000000</color>
+    <color name="white">#FFFFFF</color>
+    <color name="gray_light">#AAAAAA</color>
+    <color name="gray_dark">#555555</color>
+
+    <color name="hud_background">#80000000</color>
+    <color name="hud_text">#FFFFFF</color>
+</resources>

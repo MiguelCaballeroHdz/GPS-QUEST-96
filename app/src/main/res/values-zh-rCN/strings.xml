@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GPS Quest \'96</string>
+    <string name="config_title">初始设置</string>
+    <string name="config_language_label">语言</string>
+    <string name="config_language_es">Español</string>
+    <string name="config_language_en">English</string>
+    <string name="config_start_button">开始</string>
+    <string name="menu_new_game">新游戏</string>
+    <string name="menu_continue">继续</string>
+    <string name="menu_settings">设置</string>
+    <string name="menu_load_rom">加载ROM</string>
+    <string name="load_rom_button">加载ROM文件</string>
+    <string name="mode_gps_real">真实GPS模式</string>
+    <string name="mode_sofa">沙发模式</string>
+    <string name="mode_switch">切换模式</string>
+    <string name="hud_steps">步数</string>
+    <string name="hud_time">时间</string>
+    <string name="hud_weather">天气</string>
+    <string name="msg_gps_disabled">GPS已关闭。请使用沙发模式游玩。</string>
+    <string name="msg_bluetooth_disabled">此设备不支持蓝牙。</string>
+    <string name="msg_rom_loaded">ROM加载成功</string>
+    <string name="msg_rom_error">ROM加载失败</string>
+    <string name="config_mode_label">控制模式</string>
+    <string name="config_rom_label">ROM文件夹</string>
+    <string name="config_rom_empty">未加载ROM</string>
+    <string name="config_weather_label">动态天气</string>
+    <string name="config_vibration_label">振动</string>
+</resources>

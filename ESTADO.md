@@ -1,0 +1,51 @@
+# GPS Quest '96 - Estado Actual
+
+## Dónde estamos
+- App: GPS Quest '96 (com.gpsquest96), emulador genérico, sin referencias a terceros
+- Lotes COMPLETOS: 1 (strings), 6+6b (repo limpio, 51 archivos en carpeta privada), 2 (BLE genérico), 3 (comentarios cosméticos)
+- Build: assembleDebug verde, APK verificado
+- Limpieza legal: 7/9 cambios Lote 3 ya estaban en objetivo
+
+## Estado vivo
+Resumen de `memory/archivo/estado_actual-2026-11.md` + `tasks-2026-11.md`. Solo lo que sigue abierto.
+
+**Motor**
+- 007 CGB: slices 1-2 + timing parcial verdes; gate POCO parcial (Gen 2 en color, `CONTINUE` OK). Falta caminar el cuarto de Gen 1 en DMG; HDMA HBlank solo si el overworld falla.
+- 008 Guardado real + `.pueblo`: slices 1-2 hechos; falta la prueba destructiva (`pm clear` u otro equipo) y guardar en Gen 1 (DMG).
+- 009 B2 spawns: slices 1-2 hechos (tablas + mapa actual); el slice 3 (inyección por paso real) no está en el árbol y depende de 016.
+- B4 sprite OW: código y DMA de OAM listos; falta la foto del overworld en POCO (`hits=3` ya confirmado).
+- Deudas abiertas: APU (audio), timing fino CPU/PPU, RTC MBC3.
+
+**Mapeo y avance**
+- 004 POI-first: slices 0, 1, 2 y 6a hechos; slices 3-5 bloqueados por 016; 6b bloqueado por el slice 4.
+- 004 radio (2026-11-08): recorte de geometría a la unión de círculos, poda del acumulador a 1 km, corredor 150/120 en cada actualización y seed sin fix usando el ancla. POCO: 180 nodos (2 POI, máx. 249,4 m), raster de 159 nodos (antes 1290).
+- 004 mapa (2026-11-08): rejilla de 63×139 celdas de 8 m (504×1.112 m) en `OsmRasterGrid`, con buffer GL reutilizado. POCO: 619→676 celdas pintadas (antes 13), 605 de calle, 12 de amenity, 1 de comercio, 70 de nodo de ruta (antes 3) y 59,7 fps.
+- Criterio §7.8 (POI real → Punto de Restauración) pendiente de prueba en calle.
+- 005 gating: bloqueado por el dump POCO (slice 5c, `SRAM_FLAG_MAP`).
+- 016 arquitectura base genérica: slices 1-2 en el árbol; la spec sigue en BORRADOR y es la llave de 004 (3-5) y 009 (3).
+
+**Defectos de campo (Task 28, caminata 2026-11-06)**
+- B. Notificaciones del sistema sobre la UI → modo inmersivo estable.
+- C. Sprite del entrenador cortado/dividido → decidir atlas fijo de 4 direcciones vs composición por frame.
+- D. Movimiento a saltos por drift GPS → `WalkFilter` (015 B4).
+- E. Salto de mapa y recarga de tiles → caché por celda; lo corrige 004 slice 2.
+- F. Bloque verde oscuro al inicio → fallback sin datos OSM + carga en frío.
+- G. Repetir la caminata con log en vivo para cerrar el acta.
+
+**Alcance**
+- Solo Motor Retro de 8 bits. GBA (ARM7TDMI) diferido, con spec y carpeta propias.
+- Post-game §8 congelado: no es MVP (`memory/archivo/POSTGAME.md`).
+
+## Últimos 5 cambios
+1. Lote 3 - Comentarios cosméticos completos
+2. Lote 2 - BLE genérico (AccessoryGattService)
+3. Lote 6b - tools/ limpio, evidence.md sin metadatos ROM
+4. Lote 6 - Repo limpio, ROMs fuera en C:\Dev\gps-quest-96-private\
+5. Lote 1 - Strings visibles genéricos
+
+## Enlaces
+- Bitácora histórica: memory/archivo/bitacora-historico.md
+- Auditorías: memory/archivo/auditorias-historico.md
+- Estado detallado: memory/archivo/estado_actual-2026-11.md
+- Tablero: memory/archivo/tasks-2026-11.md
+- Specs: specs/

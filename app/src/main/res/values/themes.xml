@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.GPSQuest96" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="colorPrimary">#FFCC00</item>
+        <item name="colorPrimaryDark">#CC9900</item>
+        <item name="colorAccent">#3B4CCA</item>
+    </style>
+</resources>

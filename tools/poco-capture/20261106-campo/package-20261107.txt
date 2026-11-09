@@ -1,0 +1,4 @@
+﻿versionName=0.1.0
+lastUpdateTime=2026-11-06 14:24:48
+firstInstallTime=2026-10-22 08:47:15
+firstInstallTime=1969-12-31 18:00:00

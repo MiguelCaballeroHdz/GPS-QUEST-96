@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GPS Quest \'96</string>
+
+    <!-- Language Configuration -->
+    <string name="config_title">Initial Setup</string>
+    <string name="config_language_label">Language / Idioma</string>
+    <string name="config_language_es">Español</string>
+    <string name="config_language_en">English</string>
+    <string name="config_start_button">Start / Iniciar</string>
+
+    <!-- Main Menu -->
+    <string name="menu_new_game">New Game</string>
+    <string name="menu_continue">Continue</string>
+    <string name="menu_settings">Settings</string>
+    <string name="menu_load_rom">Load ROM</string>
+
+    <!-- Start screen -->
+    <string name="load_rom_button">LOAD ROM FILE</string>
+
+    <!-- Settings options -->
+    <string name="config_mode_label">Control mode</string>
+    <string name="config_rom_label">ROM folder</string>
+    <string name="config_rom_empty">No ROM loaded</string>
+    <string name="config_weather_label">Dynamic weather</string>
+    <string name="config_vibration_label">Vibration</string>
+
+    <!-- Player intro -->
+    <string name="intro_title">Create your character</string>
+    <string name="intro_gender">Boy or Girl?</string>
+    <string name="intro_boy">Boy</string>
+    <string name="intro_girl">Girl</string>
+    <string name="intro_name">What\'s your name?</string>
+    <string name="intro_name_hint">Name</string>
+    <string name="intro_age">How old are you?</string>
+    <string name="intro_confirm">Confirm</string>
+    <string name="intro_name_empty">Enter your name</string>
+
+    <!-- Control Modes -->
+    <string name="mode_gps_real">Real GPS Mode</string>
+    <string name="mode_sofa">Sofa Mode</string>
+    <string name="mode_switch">Switch Mode</string>
+
+    <!-- HUD -->
+    <string name="hud_steps">Steps</string>
+    <string name="hud_time">Time</string>
+    <string name="hud_weather">Weather</string>
+
+    <!-- Messages -->
+    <string name="msg_gps_disabled">GPS disabled. Enable Sofa Mode to play.</string>
+    <string name="msg_bluetooth_disabled">Bluetooth not available on this device.</string>
+    <string name="msg_rom_loaded">ROM loaded successfully</string>
+    <string name="msg_rom_error">Error loading ROM</string>
+
+    <!-- Profiles and ROMs -->
+    <string name="msg_open_rom_first">Open a ROM first</string>
+    <string name="msg_open_rom_before_import">Open the ROM before importing</string>
+    <string name="msg_no_file_manager">No file manager available</string>
+    <string name="msg_exporting_profile">Exporting profile…</string>
+    <string name="msg_importing_profile">Importing profile…</string>
+    <string name="msg_profile_exported">Profile exported (%1$s)</string>
+    <string name="msg_profile_export_failed">Could not export: %1$s</string>
+    <string name="msg_profile_import_failed">Could not import: %1$s</string>
+    <string name="msg_profile_imported_reloaded">Profile imported. %1$s</string>
+    <string name="msg_profile_imported_reopen">Profile imported. Reopen ROM to load it.</string>
+    <string name="msg_profile_reloaded_partida">Game reloaded.</string>
+    <string name="msg_profile_reloaded_no_battery">Profile without battery.sav.</string>
+    <string name="msg_only_gb_gbc_gba">Only GB/GBC/GBA ROMs supported</string>
+    <string name="msg_gba_pending">GBA pending: epic ARM core in development</string>
+    <string name="msg_gba_pending_picker">GBA pending: epic ARM core in development. Pick a GB/GBC ROM or press back for Demo.</string>
+    <string name="msg_zoom_level">Zoom x%1$d</string>
+    <string name="msg_need_story_progress">You need to advance further in the story</string>
+    <string name="msg_healed_at">Team healed at %1$s</string>
+    <string name="msg_no_heal_point">No healing spot &lt;25 m</string>
+    <string name="msg_theme_classic">Classic theme active</string>
+    <string name="msg_save_ok_flag">Save OK · flag %1$d</string>
+    <string name="msg_no_saves">No save data found</string>
+</resources>

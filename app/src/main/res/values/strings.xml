@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <string name="app_name">GPS Quest \'96</string>
+
+    <!-- Configuración de idioma -->
+    <string name="config_title">Configuración Inicial</string>
+    <string name="config_language_label">Idioma / Language</string>
+    <string name="config_language_es">Español</string>
+    <string name="config_language_en">English</string>
+    <string name="config_start_button">Iniciar / Start</string>
+
+    <!-- Menú principal -->
+    <string name="menu_new_game">Nueva Partida</string>
+    <string name="menu_continue">Continuar</string>
+    <string name="menu_settings">Configuración</string>
+    <string name="menu_load_rom">Cargar ROM</string>
+
+    <!-- Pantalla de inicio -->
+    <string name="load_rom_button">CARGAR ROM ARCHIVO</string>
+
+    <!-- Opciones de configuración -->
+    <string name="config_mode_label">Modo de control</string>
+    <string name="config_rom_label">Carpeta de ROMs</string>
+    <string name="config_rom_empty">Ninguna ROM cargada</string>
+    <string name="config_weather_label">Clima dinámico</string>
+    <string name="config_vibration_label">Vibración</string>
+
+    <!-- Intro del jugador -->
+    <string name="intro_title">Crea tu personaje</string>
+    <string name="intro_gender">¿Niño o Niña?</string>
+    <string name="intro_boy">Niño</string>
+    <string name="intro_girl">Niña</string>
+    <string name="intro_name">¿Cómo te llamas?</string>
+    <string name="intro_name_hint">Nombre</string>
+    <string name="intro_age">¿Cuántos años?</string>
+    <string name="intro_confirm">Confirmar</string>
+    <string name="intro_name_empty">Escribe tu nombre</string>
+
+    <!-- Modos de control -->
+    <string name="mode_gps_real">Modo GPS Real</string>
+    <string name="mode_sofa">Modo Sofá</string>
+    <string name="mode_switch">Cambiar Modo</string>
+
+    <!-- HUD -->
+    <string name="hud_steps">Pasos</string>
+    <string name="hud_time">Hora</string>
+    <string name="hud_weather">Clima</string>
+
+    <!-- Mensajes -->
+    <string name="msg_gps_disabled">GPS desactivado. Active el Modo Sofá para jugar.</string>
+    <string name="msg_bluetooth_disabled">Bluetooth no disponible en este dispositivo.</string>
+    <string name="msg_rom_loaded">ROM cargada correctamente</string>
+    <string name="msg_rom_error">Error al cargar la ROM</string>
+
+    <!-- Perfiles y ROMs -->
+    <string name="msg_open_rom_first" tools:ignore="MissingTranslation">Abre una ROM primero</string>
+    <string name="msg_open_rom_before_import" tools:ignore="MissingTranslation">Abre la ROM antes de importar</string>
+    <string name="msg_no_file_manager" tools:ignore="MissingTranslation">Sin gestor de archivos</string>
+    <string name="msg_exporting_profile" tools:ignore="MissingTranslation">Exportando perfil…</string>
+    <string name="msg_importing_profile" tools:ignore="MissingTranslation">Importando perfil…</string>
+    <string name="msg_profile_exported" tools:ignore="MissingTranslation">Perfil exportado (%1$s)</string>
+    <string name="msg_profile_export_failed" tools:ignore="MissingTranslation">No se pudo exportar: %1$s</string>
+    <string name="msg_profile_import_failed" tools:ignore="MissingTranslation">No se pudo importar: %1$s</string>
+    <string name="msg_profile_imported_reloaded" tools:ignore="MissingTranslation">Perfil importado. %1$s</string>
+    <string name="msg_profile_imported_reopen" tools:ignore="MissingTranslation">Perfil importado. Reabre la ROM para cargarlo.</string>
+    <string name="msg_profile_reloaded_partida" tools:ignore="MissingTranslation">Partida recargada.</string>
+    <string name="msg_profile_reloaded_no_battery" tools:ignore="MissingTranslation">Perfil sin battery.sav.</string>
+    <string name="msg_route_missing" tools:ignore="MissingTranslation">Ruta: sin ancla confirmada</string>
+    <string name="msg_route_exported" tools:ignore="MissingTranslation">Ruta exportada (%1$s)</string>
+    <string name="msg_route_export_failed" tools:ignore="MissingTranslation">No se pudo exportar la ruta: %1$s</string>
+    <string name="msg_route_import_failed" tools:ignore="MissingTranslation">No se pudo importar la ruta: %1$s</string>
+    <string name="msg_route_imported" tools:ignore="MissingTranslation">Ruta importada: %1$d nodos (%2$d POI)</string>
+    <string name="msg_only_gb_gbc_gba" tools:ignore="MissingTranslation">Solo ROMs GB/GBC/GBA</string>
+    <string name="msg_gba_pending" tools:ignore="MissingTranslation">GBA pendiente: épico ARM en construcción</string>
+    <string name="msg_gba_pending_picker" tools:ignore="MissingTranslation">GBA pendiente: épico ARM en construcción. Elige una GB/GBC o pulsa atrás para Demo.</string>
+    <string name="msg_zoom_level" tools:ignore="MissingTranslation">Zoom x%1$d</string>
+    <string name="msg_need_story_progress" tools:ignore="MissingTranslation">Necesitas avanzar más en la historia</string>
+    <string name="msg_healed_at" tools:ignore="MissingTranslation">Equipo curado en %1$s</string>
+    <string name="msg_no_heal_point" tools:ignore="MissingTranslation">Sin punto de cura &lt;25 m</string>
+    <string name="msg_theme_classic" tools:ignore="MissingTranslation">Tema clásico activo</string>
+    <string name="msg_save_ok_flag" tools:ignore="MissingTranslation">Save OK · flag %1$d</string>
+    <string name="msg_no_saves" tools:ignore="MissingTranslation">Sin partidas</string>
+    <string name="msg_water_sofa" tools:ignore="MissingTranslation">Agua a &lt;20 m · Modo Sofá</string>
+    <string name="msg_water_clear" tools:ignore="MissingTranslation">Agua despejada · vuelve el control real</string>
+</resources>

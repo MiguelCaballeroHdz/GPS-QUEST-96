@@ -1,0 +1,67 @@
+﻿Applications Memory Usage (in Kilobytes):
+Uptime: 640175603 Realtime: 998895809
+
+** MEMINFO in pid 30839 [com.gpsquest96] **
+                   Pss  Private  Private  SwapPss      Rss     Heap     Heap     Heap
+                 Total    Dirty    Clean    Dirty    Total     Size    Alloc     Free
+                ------   ------   ------   ------   ------   ------   ------   ------
+  Native Heap     9037     7896     1116    18163     9988    53080    43729     4937
+  Dalvik Heap     9002     8076      876      260     9892    28491     3915    24576
+ Dalvik Other     7305     2500      620      384    11684                           
+        Stack      720      608      112      792      724                           
+       Ashmem       60        4        0        0     1356                           
+    Other dev       15        4        8        0      744                           
+     .so mmap     6827      116      580      290    49316                           
+    .jar mmap     4079        0     1620        0    41740                           
+    .apk mmap      599        4      412       48     2280                           
+    .ttf mmap      154        0       88        0     2116                           
+    .dex mmap      386      200      176     9944     1232                           
+    .oat mmap       23        0        0        0     2492                           
+    .art mmap     4316     1144     2756     4859    13180                           
+   Other mmap     7187     5220       24        0    10412                           
+   EGL mtrack    40403    40403        0        0    40403                           
+    GL mtrack    20832    20832        0        0    20832                           
+      Unknown      546      216      300     6619     1020                           
+        TOTAL   152850    87223     8688    41359   219411    81571    47644    29513
+ 
+ App Summary
+                       Pss(KB)                        Rss(KB)
+                        ------                         ------
+           Java Heap:    11976                          23072
+         Native Heap:     7896                           9988
+                Code:     3560                         107908
+               Stack:      608                            724
+            Graphics:    61235                          61235
+       Private Other:    10636
+              System:    56939
+             Unknown:                                   16484
+ 
+           TOTAL PSS:   152850            TOTAL RSS:   219411       TOTAL SWAP PSS:    41359
+ 
+ Objects
+               Views:       39         ViewRootImpl:        1
+         AppContexts:        9           Activities:        1
+              Assets:       59        AssetManagers:        0
+       Local Binders:       40        Proxy Binders:      103
+       Parcel memory:       15         Parcel count:       59
+    Death Recipients:        1             WebViews:        0
+ 
+ Native Allocations
+                         Count                       Total(kB)
+                        ------                         ------
+   Bitmap (malloced):       79                           5293
+    Other (malloced):      625                             58
+ Other (nonmalloced):      162                            115
+ 
+ SQL
+         MEMORY_USED:       71
+  PAGECACHE_OVERFLOW:       12          MALLOC_SIZE:       46
+ 
+ DATABASES
+      pgsz     dbsz   Lookaside(b) cache hits cache misses cache size  Dbname
+PER CONNECTION STATS
+         4       16             17     0    18     1  /data/user/0/com.gpsquest96/databases/gpsquest96_data.db
+POOL STATS
+     cache hits  cache misses    cache size  Dbname
+              0            19            19  /data/user/0/com.gpsquest96/databases/gpsquest96_data.db
+

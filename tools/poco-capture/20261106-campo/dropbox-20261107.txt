@@ -1,0 +1,40 @@
+﻿Drop box contents: 33 entries
+Max entries: 1000
+Low priority rate limit period: 2000 ms
+Low priority tags: {data_app_wtf, keymaster, system_server_wtf, system_app_strictmode, system_app_wtf, system_server_strictmode, data_app_strictmode, netstats}
+
+2026-11-04 21:17:27 VirusScanHistory (text, 302 bytes)
+2026-11-04 21:18:12 VirusScanHistory (text, 300 bytes)
+2026-11-04 21:18:14 VirusScanHistory (text, 301 bytes)
+2026-11-04 21:18:24 VirusScanHistory (text, 301 bytes)
+2026-11-04 21:18:56 VirusScanHistory (text, 449 bytes)
+2026-11-04 21:19:13 VirusScanHistory (text, 341 bytes)
+2026-11-04 21:32:44 SYSTEM_BOOT (text, 499 bytes)
+2026-11-04 21:32:44 SYSTEM_LAST_KMSG (compressed text, 16068 bytes)
+2026-11-04 21:32:44 SYSTEM_AUDIT (text, 499 bytes)
+2026-11-04 21:32:44 SYSTEM_FSCK (text, 5450 bytes)
+2026-11-05 14:06:55 VirusScanHistory (text, 338 bytes)
+2026-11-05 14:07:06 VirusScanHistory (text, 331 bytes)
+2026-11-05 14:08:30 VirusScanHistory (text, 456 bytes)
+2026-11-05 14:08:39 VirusScanHistory (text, 301 bytes)
+2026-11-05 14:22:08 VirusScanHistory (text, 178 bytes)
+2026-11-05 17:35:31 data_app_crash (text, 2271 bytes)
+2026-11-06 03:13:27 VirusScanHistory (text, 339 bytes)
+2026-11-06 07:19:41 VirusScanHistory (text, 447 bytes)
+2026-11-06 07:19:47 VirusScanHistory (text, 331 bytes)
+2026-11-06 07:22:26 VirusScanHistory (text, 302 bytes)
+2026-11-06 07:22:33 VirusScanHistory (text, 301 bytes)
+2026-11-06 07:28:46 SYSTEM_BOOT (text, 499 bytes)
+2026-11-06 07:28:46 SYSTEM_LAST_KMSG (compressed text, 16136 bytes)
+2026-11-06 07:28:46 SYSTEM_AUDIT (text, 499 bytes)
+2026-11-06 08:45:26 data_app_crash (text, 2271 bytes)
+2026-11-06 14:21:36 VirusScanHistory (text, 178 bytes)
+2026-11-07 00:43:30 VirusScanHistory (text, 658 bytes)
+2026-11-07 00:44:45 VirusScanHistory (text, 300 bytes)
+2026-11-07 00:45:26 VirusScanHistory (text, 300 bytes)
+2026-11-07 07:58:29 SYSTEM_BOOT (text, 499 bytes)
+2026-11-07 07:58:29 SYSTEM_LAST_KMSG (compressed text, 15786 bytes)
+2026-11-07 07:58:29 SYSTEM_AUDIT (text, 499 bytes)
+2026-11-07 14:29:44 VirusScanHistory (text, 178 bytes)
+
+Usage: dumpsys dropbox [--print|--file] [YYYY-mm-dd] [HH:MM:SS] [tag]

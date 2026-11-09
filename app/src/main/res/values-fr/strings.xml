@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GPS Quest \'96</string>
+    <string name="config_title">Configuration initiale</string>
+    <string name="config_language_label">Langue</string>
+    <string name="config_language_es">Español</string>
+    <string name="config_language_en">English</string>
+    <string name="config_start_button">Démarrer</string>
+    <string name="menu_new_game">Nouvelle partie</string>
+    <string name="menu_continue">Continuer</string>
+    <string name="menu_settings">Paramètres</string>
+    <string name="menu_load_rom">Charger ROM</string>
+    <string name="load_rom_button">CHARGER FICHIER ROM</string>
+    <string name="mode_gps_real">Mode GPS réel</string>
+    <string name="mode_sofa">Mode Canapé</string>
+    <string name="mode_switch">Changer de mode</string>
+    <string name="hud_steps">Pas</string>
+    <string name="hud_time">Heure</string>
+    <string name="hud_weather">Météo</string>
+    <string name="msg_gps_disabled">GPS désactivé. Activez le Mode Canapé pour jouer.</string>
+    <string name="msg_bluetooth_disabled">Bluetooth indisponible sur cet appareil.</string>
+    <string name="msg_rom_loaded">ROM chargée avec succès</string>
+    <string name="msg_rom_error">Erreur de chargement de la ROM</string>
+    <string name="config_mode_label">Mode de contrôle</string>
+    <string name="config_rom_label">Dossier ROMs</string>
+    <string name="config_rom_empty">Aucune ROM chargée</string>
+    <string name="config_weather_label">Météo dynamique</string>
+    <string name="config_vibration_label">Vibration</string>
+</resources>

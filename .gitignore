@@ -1,0 +1,29 @@
+# --- Build y caches locales (no publicar) ---
+.gradle/
+.idea/
+.kotlin/
+build/
+app/build/
+app/.cxx/
+local.properties
+captures/
+
+# --- Artefactos de ejecución (no distribuir) ---
+out/
+tools/**/build/
+*.gb
+*.gbc
+*.gba
+*.sav
+*.srm
+*.log
+logcat*
+!test_wildtable*.gbc
+
+# --- Material derivado del juego (no distribuir) ---
+tools/poco-capture/**/*.png
+tools/poco-capture/**/*.bin
+tools/poco-capture/**/*.rgba
+tools/poco-capture/**/*.raw
+tools/poco-capture/**/*.mp4
+tools/poco-capture/**/*.zip

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GPS Quest \'96</string>
+    <string name="config_title">초기 설정</string>
+    <string name="config_language_label">언어</string>
+    <string name="config_language_es">Español</string>
+    <string name="config_language_en">English</string>
+    <string name="config_start_button">시작</string>
+    <string name="menu_new_game">새 게임</string>
+    <string name="menu_continue">이어하기</string>
+    <string name="menu_settings">설정</string>
+    <string name="menu_load_rom">ROM 불러오기</string>
+    <string name="load_rom_button">ROM 파일 불러오기</string>
+    <string name="mode_gps_real">GPS 리얼 모드</string>
+    <string name="mode_sofa">소파 모드</string>
+    <string name="mode_switch">모드 전환</string>
+    <string name="hud_steps">걸음 수</string>
+    <string name="hud_time">시간</string>
+    <string name="hud_weather">날씨</string>
+    <string name="msg_gps_disabled">GPS가 꺼져 있습니다. 소파 모드로 플레이하세요.</string>
+    <string name="msg_bluetooth_disabled">이 기기에서는 블루투스를 사용할 수 없습니다.</string>
+    <string name="msg_rom_loaded">ROM을 불러왔습니다</string>
+    <string name="msg_rom_error">ROM을 불러오지 못했습니다</string>
+    <string name="config_mode_label">조작 모드</string>
+    <string name="config_rom_label">ROM 폴더</string>
+    <string name="config_rom_empty">불러온 ROM 없음</string>
+    <string name="config_weather_label">동적 날씨</string>
+    <string name="config_vibration_label">진동</string>
+</resources>

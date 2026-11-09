@@ -1,0 +1,2 @@
+rootProject.name = "GPS Quest 96"
+include ':app'

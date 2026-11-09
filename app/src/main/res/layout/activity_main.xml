@@ -1,0 +1,435 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- SurfaceView para renderizado OpenGL ES 2.0 -->
+    <android.opengl.GLSurfaceView
+        android:id="@+id/gl_surface_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- ═══════════════════════════════════════════════════
+         HUD SUPERIOR (RULES.md §3)
+         ═══════════════════════════════════════════════════ -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="8dp"
+        android:background="#80000000">
+
+        <TextView
+            android:id="@+id/tv_hud_time"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="00:00"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:fontFamily="sans-serif-medium" />
+
+        <TextView
+            android:id="@+id/tv_hud_steps"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/hud_steps"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center" />
+
+        <TextView
+            android:id="@+id/tv_hud_weather"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/hud_weather"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="end" />
+
+    </LinearLayout>
+
+    <!-- Botón de ajustes (engranaje, arriba a la derecha) -->
+    <Button
+        android:id="@+id/btn_settings"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="48dp"
+        android:layout_marginEnd="12dp"
+        android:background="@drawable/bg_btn_icon"
+        android:text="⚙"
+        android:textColor="#FFFFFF"
+        android:textSize="22sp" />
+
+    <!-- HUD climático flotante (RULES §6, throttle 60s) -->
+    <TextView
+        android:id="@+id/tv_weather_badge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="104dp"
+        android:layout_marginEnd="12dp"
+        android:background="#800F380F"
+        android:padding="6dp"
+        android:text="--"
+        android:textColor="#9BBC0F"
+        android:textSize="13sp"
+        android:fontFamily="monospace" />
+
+    <!-- Zoom del mapa (detalle del entorno, cromo UI) -->
+    <Button
+        android:id="@+id/btn_zoom_in"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_gravity="top|start"
+        android:layout_marginTop="88dp"
+        android:layout_marginStart="12dp"
+        android:background="@drawable/bg_btn_icon"
+        android:text="+"
+        android:textColor="#FFFFFF"
+        android:textSize="20sp" />
+
+    <Button
+        android:id="@+id/btn_zoom_out"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_gravity="top|start"
+        android:layout_marginTop="132dp"
+        android:layout_marginStart="12dp"
+        android:background="@drawable/bg_btn_icon"
+        android:text="−"
+        android:textColor="#FFFFFF"
+        android:textSize="20sp" />
+
+    <!-- Engrane pixelado 32x32 (arriba a la izquierda, siempre visible) -->
+    <ImageButton
+        android:id="@+id/btn_gear_overlay"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_gravity="top|start"
+        android:layout_marginTop="48dp"
+        android:layout_marginStart="12dp"
+        android:background="@android:color/transparent"
+        android:src="@drawable/ic_gear_pixel"
+        android:contentDescription="@string/menu_settings" />
+
+    <!-- ═══════════════════════════════════════════════════
+         PANEL OVERLAY DE AJUSTES (oculto por defecto)
+         ═══════════════════════════════════════════════════ -->
+    <LinearLayout
+        android:id="@+id/settings_overlay"
+        android:layout_width="280dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_marginTop="96dp"
+        android:layout_marginStart="12dp"
+        android:orientation="vertical"
+        android:background="@drawable/bg_panel_overlay"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/tv_opt_language"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Cambiar Idioma"
+            android:textColor="#9BBC0F"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:padding="8dp" />
+
+        <TextView
+            android:id="@+id/tv_opt_theme"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Cambiar Tema"
+            android:textColor="#9BBC0F"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:padding="8dp" />
+
+        <TextView
+            android:id="@+id/tv_opt_rom"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Cambiar ROM"
+            android:textColor="#9BBC0F"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:padding="8dp" />
+
+        <TextView
+            android:id="@+id/tv_opt_saves"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Partidas Guardadas"
+            android:textColor="#9BBC0F"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:padding="8dp" />
+
+        <TextView
+            android:id="@+id/tv_opt_export"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Exportar perfil (.pueblo)"
+            android:textColor="#9BBC0F"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:padding="8dp" />
+
+        <TextView
+            android:id="@+id/tv_opt_import"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Importar perfil (.pueblo)"
+            android:textColor="#9BBC0F"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:padding="8dp" />
+
+        <TextView
+            android:id="@+id/tv_opt_export_route"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Exportar ruta (.ruta)"
+            android:textColor="#9BBC0F"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:padding="8dp" />
+
+        <TextView
+            android:id="@+id/tv_opt_import_route"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Importar ruta (.ruta)"
+            android:textColor="#9BBC0F"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:padding="8dp" />
+
+        <TextView
+            android:id="@+id/tv_opt_view"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Vista: Juego"
+            android:textColor="#9BBC0F"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:padding="8dp" />
+
+        <TextView
+            android:id="@+id/tv_opt_anchor"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Anclar ruta aquí"
+            android:textColor="#9BBC0F"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:padding="8dp" />
+
+        <Button
+            android:id="@+id/btn_overlay_save"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:background="@drawable/bg_btn_primary"
+            android:text="Guardar Ahora"
+            android:textColor="#000000"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace" />
+
+    </LinearLayout>
+
+    <!-- Título de sistema monospace -->
+    <TextView
+        android:id="@+id/tv_system_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="40dp"
+        android:text="GPS QUEST 96"
+        android:textColor="#9BBC0F"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:fontFamily="monospace" />
+
+    <!-- ═══════════════════════════════════════════════════
+         INDICADOR DE MODO
+         ═══════════════════════════════════════════════════ -->
+    <TextView
+        android:id="@+id/tv_mode_indicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="76dp"
+        android:text="@string/mode_gps_real"
+        android:textColor="#00FF00"
+        android:textSize="12sp"
+        android:fontFamily="sans-serif-medium" />
+
+    <!-- Nombre del jugador sobre el avatar -->
+    <TextView
+        android:id="@+id/tv_player_name"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal|center_vertical"
+        android:layout_marginBottom="200dp"
+        android:textColor="#FFFFFF"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:fontFamily="monospace"
+        android:shadowColor="#000000"
+        android:shadowDx="2"
+        android:shadowDy="2"
+        android:shadowRadius="2" />
+
+    <!-- ═══════════════════════════════════════════════════
+         PANEL DE INICIO (título + cargar ROM)
+         ═══════════════════════════════════════════════════ -->
+    <LinearLayout
+        android:id="@+id/start_panel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="24dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textColor="#FFCC00"
+            android:textSize="34sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:layout_marginBottom="24dp" />
+
+        <Button
+            android:id="@+id/btn_load_rom"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_btn_primary"
+            android:text="@string/load_rom_button"
+            android:textColor="#000000"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium" />
+
+    </LinearLayout>
+
+    <!-- ═══════════════════════════════════════════════════
+         JOYSTICK VIRTUAL (Modo Sofá)
+         ═══════════════════════════════════════════════════ -->
+    <com.gpsquest96.ui.JoystickView
+        android:id="@+id/joystick_view"
+        android:layout_width="150dp"
+        android:layout_height="150dp"
+        android:layout_gravity="bottom|start"
+        android:layout_margin="24dp"
+        android:visibility="gone" />
+
+    <!-- ═══════════════════════════════════════════════════
+         BOTÓN DE CAMBIO DE MODO
+         ═══════════════════════════════════════════════════ -->
+    <Button
+        android:id="@+id/btn_mode_switch"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="24dp"
+        android:text="@string/mode_switch"
+        android:textSize="12sp" />
+
+    <!-- ═══════════════════════════════════════════════════
+         GAMEPAD NATIVO (A/B START/SELECT) — input ROM
+         Visible en ambos modos. Bits de acción del joypad P1.
+         ═══════════════════════════════════════════════════ -->
+    <LinearLayout
+        android:id="@+id/pad_container"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="20dp"
+        android:layout_marginBottom="88dp"
+        android:orientation="vertical"
+        android:gravity="end">
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="end|center_vertical">
+
+            <TextView
+                android:id="@+id/btn_pad_b"
+                android:layout_width="58dp"
+                android:layout_height="58dp"
+                android:background="@drawable/bg_pad_button"
+                android:gravity="center"
+                android:text="B"
+                android:textColor="#9BBC0F"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace" />
+
+            <TextView
+                android:id="@+id/btn_pad_a"
+                android:layout_width="66dp"
+                android:layout_height="66dp"
+                android:layout_marginStart="14dp"
+                android:layout_marginBottom="18dp"
+                android:background="@drawable/bg_pad_button"
+                android:gravity="center"
+                android:text="A"
+                android:textColor="#9BBC0F"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace" />
+
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal"
+            android:gravity="end">
+
+            <TextView
+                android:id="@+id/btn_pad_select"
+                android:layout_width="78dp"
+                android:layout_height="34dp"
+                android:background="@drawable/bg_pad_small"
+                android:gravity="center"
+                android:text="SELECT"
+                android:textColor="#9BBC0F"
+                android:textSize="9sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace" />
+
+            <TextView
+                android:id="@+id/btn_pad_start"
+                android:layout_width="78dp"
+                android:layout_height="34dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/bg_pad_small"
+                android:gravity="center"
+                android:text="START"
+                android:textColor="#9BBC0F"
+                android:textSize="9sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</FrameLayout>

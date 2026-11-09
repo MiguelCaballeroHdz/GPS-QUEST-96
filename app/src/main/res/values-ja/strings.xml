@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GPS Quest \'96</string>
+    <string name="config_title">初期設定</string>
+    <string name="config_language_label">言語</string>
+    <string name="config_language_es">Español</string>
+    <string name="config_language_en">English</string>
+    <string name="config_start_button">開始</string>
+    <string name="menu_new_game">ニューゲーム</string>
+    <string name="menu_continue">つづき</string>
+    <string name="menu_settings">設定</string>
+    <string name="menu_load_rom">ROM読込</string>
+    <string name="load_rom_button">ROMファイル読込</string>
+    <string name="mode_gps_real">GPSリアルモード</string>
+    <string name="mode_sofa">ソファモード</string>
+    <string name="mode_switch">モード切替</string>
+    <string name="hud_steps">歩数</string>
+    <string name="hud_time">時刻</string>
+    <string name="hud_weather">天気</string>
+    <string name="msg_gps_disabled">GPSが無効です。ソファモードでプレイしてください。</string>
+    <string name="msg_bluetooth_disabled">この端末ではBluetoothを利用できません。</string>
+    <string name="msg_rom_loaded">ROMを読み込みました</string>
+    <string name="msg_rom_error">ROMの読み込みに失敗しました</string>
+    <string name="config_mode_label">操作モード</string>
+    <string name="config_rom_label">ROMフォルダ</string>
+    <string name="config_rom_empty">ROM未読込</string>
+    <string name="config_weather_label">動的天気</string>
+    <string name="config_vibration_label">バイブレーション</string>
+</resources>

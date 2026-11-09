@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ═══════════════════════════════════════════════════════
+         PERMISOS DE GEOLOCALIZACIÓN (RULES.md §2, §3)
+         ═══════════════════════════════════════════════════════ -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+    <!-- FOREGROUND (anti-HyperOS, Task 1) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- Notificaciones de foreground (API 33+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"
+        tools:targetApi="33" />
+    <!-- Foreground BLE accesorio BLE (API 34 exige permiso por tipo) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
+    <!-- ═══════════════════════════════════════════════════════
+         PERMISOS DE BLUETOOTH LE (RULES.md §7)
+         ═══════════════════════════════════════════════════════ -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation"
+        tools:targetApi="s" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT"
+        tools:targetApi="s" />
+
+    <!-- ═══════════════════════════════════════════════════════
+         PERMISOS DE ALMACENAMIENTO (RULES.md §1)
+         Carga de ROMs aportadas por el usuario
+         ═══════════════════════════════════════════════════════ -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <!-- SAF (ACTION_OPEN_DOCUMENT) no requiere READ_MEDIA_IMAGES: sobraba. -->
+
+    <!-- ═══════════════════════════════════════════════════════
+         PERMISOS DE RED (RULES.md §6)
+         OpenStreetMap + Open-Meteo
+         ═══════════════════════════════════════════════════════ -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- ═══════════════════════════════════════════════════════
+         SENSORES (RULES.md §3)
+         Podómetro para contador de pasos
+         ═══════════════════════════════════════════════════════ -->
+    <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS"
+        tools:targetApi="s" />
+    <uses-feature
+        android:name="android.hardware.sensor.stepcounter"
+        android:required="false" />
+
+    <!-- ═══════════════════════════════════════════════════════
+         CARACTERÍSTICAS DE HARDWARE
+         ═══════════════════════════════════════════════════════ -->
+    <uses-feature
+        android:name="android.hardware.location.gps"
+        android:required="true" />
+    <uses-feature
+        android:name="android.hardware.bluetooth_le"
+        android:required="false" />
+    <uses-feature
+        android:glEsVersion="0x00020000"
+        android:required="true" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.GPSQuest96"
+        tools:targetApi="34">
+
+        <!-- ═══════════════════════════════════════════════════
+             ACTIVIDAD DE CONFIGURACIÓN (vía engranes, sin LAUNCHER)
+             ═══════════════════════════════════════════════════ -->
+        <activity
+            android:name=".ui.ConfigActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <activity
+            android:name=".ui.IntroActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
+        <!-- ═══════════════════════════════════════════════════
+             ACTIVIDAD PRINCIPAL (Juego, Launcher exclusivo)
+             ═══════════════════════════════════════════════════ -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:resizeableActivity="false"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- ═══════════════════════════════════════════════════
+             SERVICIO DE GEOLOCALIZACIÓN (RULES.md §2, §3)
+             ═══════════════════════════════════════════════════ -->
+        <service
+            android:name=".gps.LocationService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
+        <!-- ═══════════════════════════════════════════════════
+             SERVICIO DE BLUETOOTH (RULES.md §7)
+             ═══════════════════════════════════════════════════ -->
+        <service
+            android:name=".bluetooth.BluetoothService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice|location" />
+
+    </application>
+
+</manifest>

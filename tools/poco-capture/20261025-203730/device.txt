@@ -1,0 +1,6 @@
+﻿model=2412DPC0AG
+android=16
+sdk=36
+package=com.gpsquest96
+apk=C:\Dev\gps-quest-96\app\build\outputs\apk\debug\app-debug.apk
+captured=2026-10-25T20:37:31.5580991-06:00

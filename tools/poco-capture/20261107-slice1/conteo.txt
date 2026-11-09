@@ -1,0 +1,14 @@
+﻿OLD  elementos=198  bytes=118058  nodos=14  vias=184
+      AMENITY   5
+      BUILDING  68
+      HIGHWAY   103
+      PARK      3
+      SHOP      15
+      TOURISM   4
+NEW  elementos=278  bytes=138261  nodos=82  vias=196
+      AMENITY   79
+      BUILDING  68
+      HIGHWAY   103
+      PARK      3
+      SHOP      15
+      TOURISM   10

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">GPS Quest \'96</string>
+    <string name="config_title">Начальная настройка</string>
+    <string name="config_language_label">Язык</string>
+    <string name="config_language_es">Español</string>
+    <string name="config_language_en">English</string>
+    <string name="config_start_button">Начать</string>
+    <string name="menu_new_game">Новая игра</string>
+    <string name="menu_continue">Продолжить</string>
+    <string name="menu_settings">Настройки</string>
+    <string name="menu_load_rom">Загрузить ROM</string>
+    <string name="load_rom_button">ЗАГРУЗИТЬ ФАЙЛ ROM</string>
+    <string name="mode_gps_real">Реальный GPS-режим</string>
+    <string name="mode_sofa">Диванный режим</string>
+    <string name="mode_switch">Сменить режим</string>
+    <string name="hud_steps">Шаги</string>
+    <string name="hud_time">Время</string>
+    <string name="hud_weather">Погода</string>
+    <string name="msg_gps_disabled">GPS отключён. Включите диванный режим для игры.</string>
+    <string name="msg_bluetooth_disabled">Bluetooth недоступен на этом устройстве.</string>
+    <string name="msg_rom_loaded">ROM успешно загружен</string>
+    <string name="msg_rom_error">Ошибка загрузки ROM</string>
+    <string name="config_mode_label">Режим управления</string>
+    <string name="config_rom_label">Папка ROM</string>
+    <string name="config_rom_empty">ROM не загружен</string>
+    <string name="config_weather_label">Динамическая погода</string>
+    <string name="config_vibration_label">Вибрация</string>
+</resources>
