@@ -63,6 +63,16 @@ Java_com_gpsquest96_emulator_EmulatorBridge_nativeGetWildTable(
         jint kind);
 
 /**
+ * Estado actual del emulador (spec 016, slice 3).
+ * Devuelve el valor de EmulatorState (BOOT=0, INTRO=1, MAP=2, BATTLE=3,
+ * MENU=4, PAUSE=5) o -1 si el PPU aun no existe.
+ */
+JNIEXPORT jint JNICALL
+Java_com_gpsquest96_emulator_EmulatorBridge_nativeGetEmulatorState(
+        JNIEnv* env,
+        jobject thiz);
+
+/**
  * Cierra la ROM y libera recursos.
  */
 JNIEXPORT void JNICALL

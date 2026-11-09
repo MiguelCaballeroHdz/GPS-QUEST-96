@@ -29,6 +29,7 @@ public class OsmClassifyHostTest {
         enumIsMinimalAndComplete();
         parseKeepsNodesAndWays();
         clipGeometry();
+        corridorCoversDiagonals();
         System.out.println("OSM CLASSIFY HOST TEST OK (" + checks + " comprobaciones)");
     }
 
@@ -136,6 +137,70 @@ public class OsmClassifyHostTest {
         check("recorte: unión conserva el segundo centro",
                 union.size() == 3 && union.get(2).id == 3);
         check("sin centros no recorta", OsmDataFetcher.parse(json).size() == 5);
+    }
+
+    /**
+     * Follow-up 2026-11-09 (spec 004 slice 2): el corredor cubre tambien las
+     * diagonales. Antes: 5 centros (ancla + 4 cardinales), alcance ~208 m en
+     * diagonal y ~270 m en los ejes. Ahora: 9 centros (ancla + 4 cardinales +
+     * 4 diagonales a spanM), alcance ~270 m tambien en diagonal.
+     */
+    private static void corridorCoversDiagonals() {
+        double lat = 19.5, lon = -96.9, radiusM = 150.0, spanM = 120.0;
+        String q = OsmDataFetcher.buildCorridorQuery(lat, lon, radiusM, spanM);
+        java.util.Set<String> centers = new java.util.HashSet<String>();
+        int aroundCount = 0;
+        int idx = 0;
+        while ((idx = q.indexOf("(around:150,", idx)) >= 0) {
+            aroundCount++;
+            int end = q.indexOf(')', idx);
+            centers.add(q.substring(idx, end + 1));
+            idx = end + 1;
+        }
+        check("corredor: 9 centros x 12 clausulas = 108 around", aroundCount == 108);
+        check("corredor: 9 centros distintos", centers.size() == 9);
+        // Geometria: 1 centro + 8 satelites a spanM en los 8 rumbos.
+        boolean[] bearingSeen = new boolean[8];
+        double diagReach = 0.0;
+        for (String c : centers) {
+            // c es "(around:150,lat,lon)": extraer lat/lon.
+            String inner = c.substring("(around:150,".length(), c.length() - 1);
+            String[] parts = inner.split(",");
+            double clat = Double.parseDouble(parts[0]);
+            double clon = Double.parseDouble(parts[1]);
+            double d = haversineM(lat, lon, clat, clon);
+            if (d < 1.0) continue;
+            check("corredor: satelite a spanM (" + Math.round(d) + " m)",
+                    Math.abs(d - spanM) < 2.0);
+            double br = bearingDeg(lat, lon, clat, clon);
+            int slot = (int) Math.round(br / 45.0) % 8;
+            bearingSeen[slot] = true;
+            if (slot % 2 == 1) diagReach = Math.max(diagReach, d + radiusM);
+        }
+        for (int i = 0; i < 8; i++) {
+            check("corredor: rumbo " + (i * 45) + " cubierto", bearingSeen[i]);
+        }
+        check("corredor: alcance diagonal >= 265 m (" + Math.round(diagReach) + " m)",
+                diagReach >= 265.0);
+    }
+
+    private static double haversineM(double lat1, double lon1, double lat2, double lon2) {
+        double r = 6371000.0;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        return 2 * r * Math.asin(Math.sqrt(a));
+    }
+
+    private static double bearingDeg(double lat1, double lon1, double lat2, double lon2) {
+        double dLon = Math.toRadians(lon2 - lon1);
+        double y = Math.sin(dLon) * Math.cos(Math.toRadians(lat2));
+        double x = Math.cos(Math.toRadians(lat1)) * Math.sin(Math.toRadians(lat2))
+                - Math.sin(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.cos(dLon);
+        double br = Math.toDegrees(Math.atan2(y, x));
+        return (br + 360.0) % 360.0;
     }
 
     private static OsmDataFetcher.Kind kind(String tagsJson) {
