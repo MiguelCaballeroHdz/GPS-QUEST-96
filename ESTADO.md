@@ -13,7 +13,7 @@ Resumen de `memory/archivo/estado_actual-2026-11.md` + `tasks-2026-11.md`. Solo 
 - 007 CGB: slices 1-2 + timing parcial verdes; gate POCO parcial (Gen 2 en color, `CONTINUE` OK). Falta caminar el cuarto de Gen 1 en DMG; HDMA HBlank solo si el overworld falla.
 - 008 Guardado real + `.pueblo`: slices 1-2 hechos; falta la prueba destructiva (`pm clear` u otro equipo) y guardar en Gen 1 (DMG).
 - 009 B2 spawns: slices 1-2 hechos (tablas + mapa actual); el slice 3 (inyección por paso real) no está en el árbol y depende de 016.
-- B4 sprite OW: código y DMA de OAM listos; falta la foto del overworld en POCO (`hits=3` ya confirmado).
+- B4 sprite OW: código y DMA de OAM listos; falta la foto del overworld en POCO (`hits=3` ya confirmado). Fix flips 2026-11-10 (rama `fix-sprite-flips`): flips OAM de la entrada TL cableados a `composeSprite` + giro inmediato sin esperar confirmación; host 33 comprobaciones, 0 fallos. Falta verificar caminando en POCO que ya no se divide.
 - Deudas abiertas: APU (audio), timing fino CPU/PPU, RTC MBC3.
 
 **Mapeo y avance**
@@ -27,7 +27,7 @@ Resumen de `memory/archivo/estado_actual-2026-11.md` + `tasks-2026-11.md`. Solo 
 
 **Defectos de campo (Task 28, caminata 2026-11-06)**
 - B. Notificaciones del sistema sobre la UI → modo inmersivo estable.
-- C. Sprite del entrenador cortado/dividido → decidir atlas fijo de 4 direcciones vs composición por frame.
+- C. Sprite del entrenador cortado/dividido → corregido en `fix-sprite-flips` (flips OAM cableados, 33 checks host); pendiente verificar caminando en POCO.
 - D. Movimiento a saltos por drift GPS → `WalkFilter` (015 B4).
 - E. Salto de mapa y recarga de tiles → caché por celda; lo corrige 004 slice 2.
 - F. Bloque verde oscuro al inicio → fallback sin datos OSM + carga en frío.

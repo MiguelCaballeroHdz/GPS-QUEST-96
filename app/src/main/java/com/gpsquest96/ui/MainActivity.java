@@ -192,9 +192,12 @@ public class MainActivity extends Activity implements SensorEventListener {
                 mmu.readObjPaletteBlock(objPalBuf);
                 int[] spriteTiles = spriteExtractor.identifySprite(vram, vram1, oam, candidates);
                 if (spriteTiles != null && gameRenderer != null) {
+                    // Flips OAM (fix-sprite-flips): sin ellos el sprite se
+                    // compone sin voltear y se ve dividido al caminar.
                     int[] spritePixels = spriteExtractor.composeSprite(
                             vram, vram1, spriteTiles[0], spriteExtractor.getSpriteBank(),
-                            objPalBuf, spriteExtractor.getSpritePalette(), obp0);
+                            objPalBuf, spriteExtractor.getSpritePalette(), obp0,
+                            spriteExtractor.getSpriteFlipX(), spriteExtractor.getSpriteFlipY());
                     if (spritePixels != null) {
                         // worker â†’ hilo GL (volatile), igual que el atlas.
                         gameRenderer.setSpritePixels(spritePixels);

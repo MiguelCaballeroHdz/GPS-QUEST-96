@@ -21,6 +21,12 @@ import java.util.List;
  * hasta que otro candidato se confirme, así que el mapa no muestra saltos
  * (base=133/137 alternando cada frame en la auditoría del 2026-10-29).
  * <p>
+ * El sprite publicado lleva banco, paleta y flips: los bits FlipX (0x20) y
+ * FlipY (0x40) se leen del atributo OAM de la entrada superior-izquierda
+ * del bloque 2x2 y se publican junto con el base. Sin ellos, al caminar el
+ * sprite se compone sin voltear y se ve dividido (el juego voltea el bloque
+ * al girar y en cuadros de la animación de paso).
+ * <p>
  * Fallback honesto: sin identificación no se compone nada (punto blanco).
  */
 public final class SpriteExtractor {
@@ -57,6 +63,8 @@ public final class SpriteExtractor {
     private int candidateStreak = 0;
     private int pendingBank = 0;
     private int pendingPalette = 0;
+    private boolean pendingFlipX = false;
+    private boolean pendingFlipY = false;
     private int missStreak = 0;
     private long lastLogMs = 0;
     // spec 015 D-25: el bloque de OAM centrado puede ser cualquier OBJ de la
@@ -70,6 +78,8 @@ public final class SpriteExtractor {
     private volatile int[] confirmedTiles = null;
     private volatile int spriteBank = 0;
     private volatile int spritePalette = 0;
+    private volatile boolean spriteFlipX = false;
+    private volatile boolean spriteFlipY = false;
 
     /** Banco de VRAM del bloque publicado (0 = DMG/banco 0, 1 = CGB). */
     public int getSpriteBank() {
@@ -79,6 +89,16 @@ public final class SpriteExtractor {
     /** Paleta OBJ CGB del bloque publicado (0-7). */
     public int getSpritePalette() {
         return spritePalette;
+    }
+
+    /** FlipX del bloque publicado (bit 0x20 del atributo OAM de la entrada TL). */
+    public boolean getSpriteFlipX() {
+        return spriteFlipX;
+    }
+
+    /** FlipY del bloque publicado (bit 0x40 del atributo OAM de la entrada TL). */
+    public boolean getSpriteFlipY() {
+        return spriteFlipY;
     }
 
     /** Registra que el jugador se movió (UI thread). */
@@ -132,8 +152,12 @@ public final class SpriteExtractor {
             if (base >= 0) {
                 // El diff solo mira el banco 0 (DMG); en CGB el jugador vive
                 // en el banco 1, así que este camino queda como respaldo.
+                // Sin OAM no hay evidencia de flips: se publican sin voltear,
+                // igual que hacía el overload de 7 args de composeSprite.
                 pendingBank = 0;
                 pendingPalette = 0;
+                pendingFlipX = false;
+                pendingFlipY = false;
             }
         }
         if (base < 0) {
@@ -177,6 +201,18 @@ public final class SpriteExtractor {
         } else {
             lastOamBase = -1;
         }
+        // Flip inmediato: si el candidato es el sprite ya publicado (mismo
+        // base y banco), el giro se aplica en este tick sin esperar otra
+        // confirmación de 6 ticks. Al caminar los bases alternan (133/137)
+        // y la racha no llega a 6, así que sin esto el sprite quedaba
+        // ~200 ms mirando al lado viejo tras cada giro. Los tiles no
+        // cambian, así que no hay riesgo de troceado: tiles y flips
+        // describen el mismo bloque.
+        if (confirmedTiles != null && base == confirmedTiles[0]
+                && pendingBank == spriteBank) {
+            spriteFlipX = pendingFlipX;
+            spriteFlipY = pendingFlipY;
+        }
         if (base == candidateBase && pendingBank == candidateBank) {
             candidateStreak++;
         } else {
@@ -194,12 +230,15 @@ public final class SpriteExtractor {
         confirmedTiles = tiles;
         spriteBank = pendingBank;
         spritePalette = pendingPalette;
+        spriteFlipX = pendingFlipX;
+        spriteFlipY = pendingFlipY;
         long now = System.currentTimeMillis();
         if ((previous == null || previous[0] != base) && now - lastLogMs > 1000) {
             lastLogMs = now;
             android.util.Log.i("SpriteExtractor", "sprite OW base=" + base
                     + " via=" + (viaOam ? "OAM" : "VRAM")
                     + " bank=" + spriteBank + " pal=" + spritePalette
+                    + " flipX=" + spriteFlipX + " flipY=" + spriteFlipY
                     + " tiles=" + tiles[0] + "," + tiles[1] + ","
                     + tiles[2] + "," + tiles[3]
                     + " hits=" + candidateStreak);
@@ -268,9 +307,17 @@ public final class SpriteExtractor {
         }
 
         // Bloque 16x16: la celda superior-izquierda manda (y fija su banco).
+        // Los flips salen del atributo de esa misma entrada TL: el juego
+        // maneja el bloque 2x2 como un solo sprite y en la práctica las 4
+        // entradas comparten el byte de atributo (evidencia POCO: las 4 con
+        // 0x08/0x88, mismo bit de banco). Si alguna entrada discrepara,
+        // manda la TL, igual que ya mandaba para base, banco y paleta, y
+        // composeSprite aplica ese único par de flips a todo el bloque.
         int tlTile = -1;
         int tlBank = 0;
         int tlPalette = 0;
+        boolean tlFlipX = false;
+        boolean tlFlipY = false;
         int minSx = Integer.MAX_VALUE;
         int minSy = Integer.MAX_VALUE;
         for (int i = 0; i < 40; i++) {
@@ -287,10 +334,14 @@ public final class SpriteExtractor {
                 tlTile = oam[o + 2] & 0xFF;
                 tlBank = ((oam[o + 3] & OAM_ATTR_BANK) != 0) ? 1 : 0;
                 tlPalette = oam[o + 3] & OAM_ATTR_PALETTE;
+                tlFlipX = (oam[o + 3] & OAM_ATTR_FLIP_X) != 0;
+                tlFlipY = (oam[o + 3] & OAM_ATTR_FLIP_Y) != 0;
             }
         }
         pendingBank = tlBank;
         pendingPalette = tlPalette;
+        pendingFlipX = tlFlipX;
+        pendingFlipY = tlFlipY;
         return (tlTile >= 0 && tlTile <= 380
                 && tilesPresent(vramFor(vram0, vram1, tlBank), tlTile)) ? tlTile : -1;
     }
@@ -332,11 +383,6 @@ public final class SpriteExtractor {
 
     private static final int OAM_ATTR_FLIP_X = 0x20;
     private static final int OAM_ATTR_FLIP_Y = 0x40;
-
-    private int pendingFlipX = 0;
-    private int pendingFlipY = 0;
-    private int spriteFlipX = 0;
-    private int spriteFlipY = 0;
 
     public int[] composeSprite(byte[] vram0, byte[] vram1, int base, int bank,
                                byte[] objPal, int palette, int obp0) {
@@ -413,8 +459,12 @@ public final class SpriteExtractor {
         candidateStreak = 0;
         pendingBank = 0;
         pendingPalette = 0;
+        pendingFlipX = false;
+        pendingFlipY = false;
         spriteBank = 0;
         spritePalette = 0;
+        spriteFlipX = false;
+        spriteFlipY = false;
         missStreak = 0;
         lastLogMs = 0;
         lastOamBase = -1;
