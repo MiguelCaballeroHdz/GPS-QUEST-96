@@ -61,6 +61,7 @@ import com.gpsquest96.route.Route;
 import com.gpsquest96.route.RouteBundle;
 import com.gpsquest96.route.RouteGenerator;
 import com.gpsquest96.route.RouteNode;
+import com.gpsquest96.route.RouteProgress;
 import com.gpsquest96.utils.LocaleHelper;
 
 import java.nio.ByteBuffer;
@@ -1200,6 +1201,7 @@ public class MainActivity extends Activity implements SensorEventListener {
                         routeNodeCount = route.nodes.size();
                         lastRouteStatus = "Ruta: " + route.nodes.size()
                                 + " nodos (" + poi + " POI)";
+                        if (gameEngine != null) gameEngine.setRoute(route);
                         if (gameRenderer != null) gameRenderer.feedRouteNodes(route.nodes);
                         Log.i("GameEngine", "RUTA IMPORTADA " + route.nodes.size()
                                 + " nodos (" + poi + " POI, " + synthetic
@@ -1308,6 +1310,9 @@ public class MainActivity extends Activity implements SensorEventListener {
         // Log solo con ruta y tamaÃ±o: el tÃ­tulo ya viene sanitizado del bridge.
         Log.i("GameEngine", "ROM abierta OK: " + dest.getAbsolutePath()
                 + " (" + dest.length() + " bytes)");
+        // Spec 004, slice 4: si hay ruta guardada para esta ROM, se restaura
+        // con su progreso en el motor.
+        if (ok) restoreRouteIntoEngine();
         // Superficie en modo continuo: no-op inocuo que confirma el pipeline.
         glSurfaceView.requestRender();
         Toast.makeText(this,
@@ -1357,6 +1362,9 @@ public class MainActivity extends Activity implements SensorEventListener {
             gameEngine.getControlModeManager().setMode(ControlModeManager.ControlMode.SOFA);
             handleModeSwitch(ControlModeManager.ControlMode.SOFA);
         }
+        // Spec 004, slice 4: al arrancar con ROM guardada, la ruta y su
+        // progreso vuelven al motor (sin ruta guardada no hace nada).
+        restoreRouteIntoEngine();
     }
 
     // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -1972,6 +1980,7 @@ public class MainActivity extends Activity implements SensorEventListener {
             routeNodeCount = route.nodes.size();
             lastRouteStatus = "Ruta: " + route.nodes.size() + " nodos (" + poi + " POI)";
             writeRouteFile(route);
+            if (gameEngine != null) gameEngine.setRoute(route);
             if (gameRenderer != null) gameRenderer.feedRouteNodes(route.nodes);
             Log.i("GameEngine", "RUTA OK " + route.nodes.size() + " nodos ("
                     + poi + " POI, " + synthetic + " sintéticos) · "
@@ -1991,6 +2000,27 @@ public class MainActivity extends Activity implements SensorEventListener {
             Log.i("GameEngine", "Ruta escrita: " + f.getName() + " (" + f.length() + " B)");
         } catch (Throwable t) {
             Log.w("GameEngine", "No se pudo escribir la ruta", t);
+        }
+    }
+
+    /**
+     * Spec 004, slice 4: restaura la ruta guardada y su progreso en el
+     * motor (al arrancar con ROM guardada o tras cargar una ROM). Sin
+     * archivo de ruta no hace nada; el progreso lo carga el motor desde
+     * {@code progress_<rom_key>.json} (o empieza en 0 si no existe).
+     */
+    private void restoreRouteIntoEngine() {
+        if (gameEngine == null) return;
+        try {
+            Route route = readCurrentRoute();
+            if (route == null) return;
+            gameEngine.setRoute(route);
+            routeNodeCount = route.nodes.size();
+            lastRouteStatus = "Ruta: " + route.nodes.size() + " nodos";
+            if (gameRenderer != null) gameRenderer.feedRouteNodes(route.nodes);
+            Log.i("GameEngine", "Ruta restaurada: " + route.nodes.size() + " nodos");
+        } catch (Throwable t) {
+            Log.w("GameEngine", "No se pudo restaurar la ruta", t);
         }
     }
 
@@ -2998,6 +3028,23 @@ public class MainActivity extends Activity implements SensorEventListener {
                 default:
                     break;
             }
+        }
+
+        @Override
+        public void onRouteNodeResolved(final int nodeIndex) {
+            // Spec 004, slice 4: ya llega en el hilo principal (GameEngine
+            // lo publica ahí). El nodo 0 resuelto vuelve el ancla
+            // inmutable (R1): por fin `route_nodo0_resuelto` tiene escritor.
+            Log.i("GameEngine", "004 nodo resuelto: " + nodeIndex);
+            if (nodeIndex == 0) {
+                onboardPrefs().edit().putBoolean("route_nodo0_resuelto", true).apply();
+            }
+            if (gameEngine != null && gameEngine.getRouteProgress() != null) {
+                RouteProgress p = gameEngine.getRouteProgress();
+                lastRouteStatus = "Ruta: pos " + p.getPosition() + "/" + p.getNodeCount()
+                        + " · resueltos " + p.resolvedCount();
+            }
+            refreshOsmStatusLine();
         }
     };
 

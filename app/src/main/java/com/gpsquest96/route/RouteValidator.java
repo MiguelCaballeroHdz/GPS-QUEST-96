@@ -137,9 +137,18 @@ public final class RouteValidator {
         public final boolean doubtful;
         /** Motivos de duda; vacío si la lectura es limpia. */
         public final List<String> doubts;
+        /**
+         * true si alguna duda impide ACTUAR sobre la lectura (slice 4).
+         * Bloquean: sin fix, fix impreciso o de precisión desconocida, y
+         * cadena de snapshots rota (sin previo). NO bloquean las dudas de
+         * destino (nodo sin destino declarado, mapa incompatible o casilla
+         * distinta): esas las decide la regla de destino del slice 4
+         * (avance sin resolver, o re-enganche), no la calidad del fix.
+         */
+        public final boolean blocked;
 
         Validation(boolean arrival, boolean consumption, Destination destination,
-                double distanceM, boolean romMoved, List<String> doubts) {
+                double distanceM, boolean romMoved, List<String> doubts, boolean blocked) {
             this.arrival = arrival;
             this.consumption = consumption;
             this.destination = destination;
@@ -147,6 +156,7 @@ public final class RouteValidator {
             this.romMoved = romMoved;
             this.doubts = Collections.unmodifiableList(doubts);
             this.doubtful = !doubts.isEmpty();
+            this.blocked = blocked;
         }
 
         /** Una línea de log: `R3 nodo=N llegada=S/N consumo=S/N destino=OK/NO/N-A dudosa=S/N [motivos]`. */
@@ -210,12 +220,13 @@ public final class RouteValidator {
         if (node == null) throw new IllegalArgumentException("nodo nulo");
 
         List<String> doubts = new ArrayList<String>();
+        boolean blocked = false;
 
         // Sin snapshot ROM válido no se puede medir nada.
         if (cur == null || !cur.valid) {
             doubts.add("sin snapshot ROM válido");
             return new Validation(false, false, Destination.NOT_APPLICABLE,
-                    Double.NaN, false, doubts);
+                    Double.NaN, false, doubts, true);
         }
 
         // Señal 1 — Llegada: fix dentro del radio del nodo.
@@ -223,14 +234,17 @@ public final class RouteValidator {
         double distanceM = Double.NaN;
         if (fix == null) {
             doubts.add("sin fix GPS");
+            blocked = true;
         } else {
             distanceM = RouteGenerator.haversineM(fix.lat, fix.lon, node.lat, node.lon);
             arrival = distanceM <= node.radiusM;
             if (Float.isNaN(fix.accuracyM)) {
                 doubts.add("precisión del fix desconocida");
+                blocked = true;
             } else if (fix.accuracyM > node.radiusM) {
                 doubts.add("fix impreciso: ±" + Math.round(fix.accuracyM)
                         + " m > radio " + Math.round(node.radiusM) + " m");
+                blocked = true;
             }
         }
 
@@ -239,6 +253,7 @@ public final class RouteValidator {
         boolean consumption = romMoved;
         if (prev == null || !prev.valid) {
             doubts.add("sin snapshot previo (no se puede medir consumo)");
+            blocked = true;
         } else if (!romMoved) {
             doubts.add("avatar sin cambio de posición ROM (bloqueado o parado)");
         }
@@ -262,6 +277,6 @@ public final class RouteValidator {
         }
 
         return new Validation(arrival, consumption, destination,
-                distanceM, romMoved, doubts);
+                distanceM, romMoved, doubts, blocked);
     }
 }

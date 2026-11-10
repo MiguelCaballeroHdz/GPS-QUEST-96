@@ -120,6 +120,61 @@ Cada nodo declara:
 
 Arquitecturas de 32 bits, eventos secundarios congelados (§8), batalla con UI propia. **La cadencia de eventos la deciden los datos del usuario**.
 
+## 10. Notas de implementación — slice 4 (2026-11-10, host)
+
+Modelo en dos niveles (§3.3), decidido en este slice: en cada fix GPS
+se evalúa SOLO el nodo en `posicion` con la doble validación del slice 3.
+Un nodo distinto de `posicion` nunca se resuelve por proximidad: eso
+impediría saltar nodos caminando (o en vehículo) por encima de la
+secuencia.
+
+- **Avance:** llegada + consumo + lectura no bloqueada ⇒ `posicion` sube
+  en uno. Sin cambio de posición ROM no hay avance (R5).
+- **Resolución:** el nodo se marca resuelto cuando, además, el destino
+  está bien: `MATCH`, o `NOT_APPLICABLE` cuando el nodo no declara
+  destino. Hoy TODOS los nodos generados son `NO_DEST`, así que resolver
+  = llegar + moverse; en cuanto el volcado POCO (005) declare destinos
+  reales, el `MATCH` se exige solo, sin cambiar código.
+- **Avance sin resolver:** llegada + consumo con destino `MISMATCH` ⇒
+  `posicion` avanza pero el nodo queda pendiente. El re-enganche puede
+  devolver al jugador allí; si nunca completa el destino, la válvula de
+  escape (slice 6b) es la salida.
+- **Lecturas bloqueadas** (`Validation.blocked`, slice 4): sin fix, fix
+  impreciso o de precisión desconocida, y cadena de snapshots rota. Una
+  lectura bloqueada no avanza ni resuelve nada. Las dudas de destino
+  (sin destino declarado, mapa incompatible, casilla distinta) NO
+  bloquean el avance: las decide la regla de destino.
+- **Re-enganche (R6):** corre ANTES de evaluar el nodo actual. Solo
+  hacia atrás, al pendiente más alto dentro de 120 m con `map_id`
+  compatible; nunca incrementa `posicion`. El fix debe ser fiable para
+  mover la posición (precisión desconocida se permite, > 120 m no).
+- **Fin de ruta (R10):** `posicion == N` es el estado explícito de fin;
+  una vez terminada no se evalúa más. Los pendientes que queden son
+  trabajo del slice 6b.
+- **Persistencia:** `progress_<rom_key>.json` en `filesDir/routes/`,
+  guardado atómico (`.tmp` → `.bak` → rename, mismo patrón que
+  `RouteBundle.save`). No usa SQLite: `DatabaseHelper` no tiene tablas
+  por diseño (purga VISION; el schema fiel a ROM llega con la Fase B).
+  Tampoco SharedPreferences: el progreso es un dato por ruta y pertenece
+  junto a su archivo de ruta. Un progreso corrupto o de otra partida se
+  rechaza con motivo y se empieza en 0 (nunca se aplica a medias).
+- **Cableado:** `GameEngine.setRoute(route)` al generar/importar la ruta
+  y al cargar la ROM (también al arrancar con ROM guardada); el progreso
+  se persiste en su archivo en cada cambio. El aviso
+  `onRouteNodeResolved` llega a `MainActivity`: el nodo 0 resuelto
+  escribe por fin `route_nodo0_resuelto` (el ancla se vuelve inmutable,
+  R1) y la línea de ruta muestra `pos N/M · resueltos K`.
+  `setValidationRoute`/`setValidationNodeIndex` se retiran (sin usos: la
+  ruta nunca llegaba al motor en el slice 3).
+- **`map_id` provisional:** la codificación `grupo * 256 + mapa` vive en
+  UNA sola función, `RouteValidator.mapIdOf` (usada por el validador y
+  por el re-enganche; grep verificado). Sigue pendiente confirmarla con
+  el volcado POCO (005); corregirla después es un cambio de una línea.
+- **Discrepancia (anotada, no inventada):** el plan cita "§12
+  (D-01…D-05) de la spec", pero la spec aprobada tiene 9 secciones: no
+  existe §12. Las D-01…D-05 que aparecen en el archivo pertenecen a la
+  spec 015 (auditoría), no a la 004.
+
 ## 9. Dependencias
 
 - **016** — estado del emulador e identidad de mapa por perfil.

@@ -7,7 +7,10 @@ tipados ni validación de los datos del juego.
 
 Spec: `specs/004-mapeo-global-dinamico/spec.md` (APROBADO 2026-11-06).
 
-Referencias de decisiones: §2 (D1-D3) y §12 (D-01…D-05) de la spec.
+Referencias de decisiones: §2 (D1-D3) de la spec. Corrección 2026-11-10:
+el plan citaba "§12 (D-01…D-05) de la spec", pero la spec aprobada tiene
+9 secciones: no existe §12. Las D-01…D-05 del archivo pertenecen a la
+spec 015, no a la 004.
 
 ## Reglas del plan
 
@@ -165,13 +168,43 @@ Referencias de decisiones: §2 (D1-D3) y §12 (D-01…D-05) de la spec.
 ### Slice 4 — Avance monotónico, `resueltos[]` y re-enganche
 
 - **Objetivo:** progreso correcto sin deshacer eventos.
-- **Archivos:** modelo de ruta + persistencia (SQLite) + `GameEngine`.
+- **Archivos:** modelo de ruta + persistencia (JSON) + `GameEngine`.
 - **Tareas:**
   - `posicion` puede bajar; `resueltos[]` solo crece.
   - Re-enganche solo hacia atrás, nunca incrementa `posicion`; umbral 120 m.
   - Anti-skip: sin cambio de posición ROM, no hay avance.
 - **Criterios:** §7.5 y §7.6.
 - **Depende de:** slice 3.
+- **Estado: HECHO 2026-11-10 (host; dispositivo pendiente).**
+  `RouteProgress` (nueva, Java puro): evalúa solo el nodo en `posicion`
+  por fix; avance con llegada + consumo + lectura no bloqueada
+  (`Validation.blocked`: sin fix, fix impreciso o de precisión
+  desconocida, cadena de snapshots rota); resolución con destino `MATCH`
+  o `NOT_APPLICABLE` (hoy todos los nodos son `NO_DEST`: resolver =
+  llegar + moverse; el `MATCH` se exigirá solo cuando 005 declare
+  destinos, sin cambiar código); avance sin resolver con destino
+  `MISMATCH`; re-enganche antes de evaluar, solo hacia atrás, al
+  pendiente más alto dentro de 120 m con `map_id` compatible
+  (`RouteValidator.mapIdOf`, función única, codificación provisional
+  pendiente del volcado POCO); fin de ruta explícito (`posicion == N`,
+  sin más evaluación). Persistencia en
+  `filesDir/routes/progress_<rom_key>.json` con guardado atómico
+  (`.tmp` → `.bak` → rename): no SQLite (sin tablas por diseño) ni
+  SharedPreferences (dato por ruta, junto a su archivo). Cableado en
+  `GameEngine.setRoute` (generar/importar/cargar ROM/arranque) con
+  persistencia en cada cambio y aviso `onRouteNodeResolved`; en
+  `MainActivity` el nodo 0 resuelto escribe por fin
+  `route_nodo0_resuelto` (ancla inmutable, R1) y la línea de ruta muestra
+  `pos N/M · resueltos K`. `setValidationRoute`/`setValidationNodeIndex`
+  retirados (sin usos: la ruta nunca llegaba al motor en el slice 3).
+  Host `RouteProgressHostTest`: **47 comprobaciones, `EXIT=0`**
+  (monotonicidad, re-enganche, anti-skip, puerta de destino,
+  persistencia y rechazos); `RouteValidatorHostTest` 43 (7 nuevas del
+  flag `blocked`). Suite Java completa: **604 comprobaciones, 0 fallos**.
+  Build `assembleDebug` NO verificado en esta VM (timeout de Maven
+  documentado); queda para la PC de Miguel. `BUILD_TAG` sin tocar.
+  **Dispositivo pendiente de sesión de calle en POCO** (criterios §7.5
+  y §7.6) y del volcado POCO (005) para confirmar `map_id`.
 
 ### Slice 5 — `enter`/`talk` automáticos
 
@@ -218,9 +251,9 @@ Referencias de decisiones: §2 (D1-D3) y §12 (D-01…D-05) de la spec.
 | 1 | 3.5, 4/R2 | 3, 8 + POCO | HECHO 2026-11-07 (host 81 + POCO 278 elem) |
 | 2 | 3.1, 4/R1, 5.2 | 1, 2, 4 (host) · 8 (dispositivo) | HECHO host 2026-11-07; criterio de dispositivo pendiente |
 | 3 | 4/R3, 5.3 | 9, 10, 11 (*) | HECHO host 2026-11-10 (36 checks); dispositivo pendiente de calle |
-| 4 | 3.3, 4/R5-R8 | 5, 6 | pendiente (desbloqueado: dependía del 3) |
-| 5 | 3.4, 4/R7, R9 | 12 | pendiente |
-| 6 | 4/R10, 6 | 7 | 6a export/import HECHO 2026-11-07 (host 26); 6b válvula pendiente del slice 4 |
+| 4 | 3.3, 4/R5-R8 | 5, 6 | HECHO host 2026-11-10 (47 checks); dispositivo pendiente |
+| 5 | 3.4, 4/R7, R9 | 12 | pendiente (desbloqueado: dependía del 4) |
+| 6 | 4/R10, 6 | 7 | 6a export/import HECHO 2026-11-07 (host 26); 6b válvula desbloqueada (el estado ya existe) |
 
 (*) Discrepancia: la spec aprobada §7 solo numera 8 criterios; no existen §7.9–11. Los checks de host del slice 3 son: tres señales logueadas por fix, cero escrituras, lecturas dudosas marcadas. Dispositivo pendiente de calle.
 
@@ -230,5 +263,6 @@ Referencias de decisiones: §2 (D1-D3) y §12 (D-01…D-05) de la spec.
 - Los slices 3-5 quedan bloqueados hasta que 016 entregue identidad de mapa por perfil.
 - El criterio de POI real → Punto de Restauración necesita calle real: se cierra con el
   dispositivo, no con inspección.
-- Hasta que exista `resueltos[]` (slice 4), `route_nodo0_resuelto` no tiene escritor y el
-  ancla sigue siendo re-anclable.
+- `resueltos[]` existe desde el slice 4 (2026-11-10) y `route_nodo0_resuelto`
+  ya tiene escritor (`onRouteNodeResolved` en MainActivity): el ancla deja
+  de ser re-anclable en cuanto se resuelve el nodo 0.

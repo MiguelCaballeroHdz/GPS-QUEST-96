@@ -17,7 +17,8 @@ Resumen de `memory/archivo/estado_actual-2026-11.md` + `tasks-2026-11.md`. Solo 
 - Deudas abiertas: APU (audio), timing fino CPU/PPU, RTC MBC3.
 
 **Mapeo y avance**
-- 004 POI-first: slices 0, 1, 2, 3 y 6a hechos; slice 4 desbloqueado (dependía del 3); slice 5 pendiente; 6b bloqueado por el slice 4.
+- 004 POI-first: slices 0, 1, 2, 3, 4 y 6a hechos; slice 5 desbloqueado (dependía del 4); 6b desbloqueado (el estado ya existe).
+- 004 slice 4 (2026-11-10): `RouteProgress` (posicion/resueltos[], re-enganche solo atrás 120 m, anti-skip) con persistencia en `progress_<rom_key>.json`; host 47 comprobaciones nuevas, total 604, 0 fallos. `map_id = grupo * 256 + mapa` sigue provisional (una sola función, `RouteValidator.mapIdOf`) pendiente del volcado POCO (005). Dispositivo pendiente de sesión de calle en POCO (criterios §7.5 y §7.6).
 - 004 slice 3 (2026-11-10): `RouteValidator` mide R3 en modo lectura (llegada/consumo/destino por fix GPS, cero escrituras); host 36 comprobaciones, 0 fallos. Sin destino declarado la señal 3 es N-A (hoy ningún nodo tiene destino). Dispositivo pendiente de sesión de calle en POCO.
 - 004 radio (2026-11-08): recorte de geometría a la unión de círculos, poda del acumulador a 1 km, corredor 150/120 en cada actualización y seed sin fix usando el ancla. POCO: 180 nodos (2 POI, máx. 249,4 m), raster de 159 nodos (antes 1290).
 - 004 mapa (2026-11-08): rejilla de 63×139 celdas de 8 m (504×1.112 m) en `OsmRasterGrid`, con buffer GL reutilizado. POCO: 619→676 celdas pintadas (antes 13), 605 de calle, 12 de amenity, 1 de comercio, 70 de nodo de ruta (antes 3) y 59,7 fps.

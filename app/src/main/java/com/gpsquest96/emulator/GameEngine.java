@@ -10,7 +10,8 @@ import com.gpsquest96.gps.GeofenceManager;
 import com.gpsquest96.gps.WeatherData;
 import com.gpsquest96.gps.WeatherService;
 import com.gpsquest96.route.Route;
-import com.gpsquest96.route.RouteNode;
+import com.gpsquest96.route.RouteFormatException;
+import com.gpsquest96.route.RouteProgress;
 import com.gpsquest96.route.RouteValidator;
 import com.gpsquest96.emulator.core.EmulationPipeline;
 
@@ -70,12 +71,13 @@ public class GameEngine {
     private volatile EmulatorState currentState = EmulatorState.BOOT;
     private int[] eventFlags = new int[256]; // Variables de progreso (RULES.md Ã‚Â§4)
 
-    // Spec 004, slice 3: doble validación en modo lectura (R3). Solo lee:
-    // mide las tres señales y loguea; nunca escribe en el juego ni avanza
-    // `posicion` (no existe aún: eso es el slice 4). La ruta y el índice
-    // del nodo a validar los pone MainActivity; por defecto, nodo 0.
-    private volatile Route validationRoute;
-    private volatile int validationNodeIndex = 0;
+    // Spec 004, slice 4: avance monotónico (R5, R6, R8). El progreso
+    // (posicion + resueltos[]) lo lleva RouteProgress y vive en
+    // filesDir/routes/progress_<rom_key>.json, aparte de la ruta (que es
+    // de solo lectura). La ruta y el archivo los pone MainActivity con
+    // setRoute(); por defecto no hay ruta activa y no se evalúa nada.
+    private volatile RouteProgress routeProgress;
+    private java.io.File routeProgressFile;
     private RouteValidator.RomSnapshot lastRomSnapshot;
     private int lastEvaluatedFixCount = -1;
     private RouteValidator.Validation lastValidation;
@@ -104,6 +106,15 @@ public class GameEngine {
          * slice 4 lo implementa en MainActivity con la reaccion de UI.
          */
         default void onEmulatorStateChanged(EmulatorState newState) {
+        }
+
+        /**
+         * Spec 004, slice 4: un nodo de la ruta quedó resuelto. Método
+         * default para que los implementadores existentes sigan compilando;
+         * MainActivity lo usa para marcar `route_nodo0_resuelto` (el ancla
+         * se vuelve inmutable, R1) y actualizar la línea de ruta.
+         */
+        default void onRouteNodeResolved(int nodeIndex) {
         }
     }
 
@@ -313,8 +324,9 @@ public class GameEngine {
         // Spec 016, slice 3: sondear el estado del emulador una vez por frame.
         checkEmulatorState();
 
-        // Spec 004, slice 3: doble validación en modo lectura (R3).
-        maybeValidateRoute();
+        // Spec 004, slice 4: avance monotónico (R5, R6, R8) sobre la
+        // doble validación del slice 3.
+        maybeAdvanceRoute();
 
         // Actualizar clima periÃƒÂ³dicamente
         updateWeather();
@@ -351,25 +363,28 @@ public class GameEngine {
     }
 
     /**
-     * Spec 004, slice 3: doble validación en modo lectura (R3).
+     * Spec 004, slice 4: avance monotónico (R5, R6, R8) sobre la doble
+     * validación del slice 3 (R3).
      * <p>
      * En cada fix GPS nuevo (LocationService, 5 s / 5 m) toma un snapshot
      * de la posición ROM en el frame en curso (tras stepFrame, es decir,
-     * en VBlank) y evalúa las tres señales sobre el nodo en validación:
-     * llegada, consumo y destino. Solo lee y loguea: no escribe en el
-     * juego, no toca eventFlags ni SaveManager y no avanza `posicion`.
+     * en VBlank) y deja que {@link RouteProgress#evaluate} mueva
+     * {@code posicion} y {@code resueltos[]} según las tres señales. No
+     * escribe en el juego ni toca eventFlags ni SaveManager: solo el
+     * progreso de la ruta, que se persiste en su archivo cuando cambia.
      * <p>
      * El snapshot NO se toma cada frame: `getCurrentMap()` loguea en
      * nativo en cada llamada (009-B2) y a 60 fps saturaría el log. La
      * comparación es por fix, así que el snapshot se toma en el frame en
      * que se procesa cada fix; la posición ROM entre fixes no se necesita.
      * El fix es el REAL (`getRealLocation()`), nunca el simulado de Modo
-     * Sofá (`getCurrentCoordinates()`).
+     * Sofá (`getCurrentCoordinates()`). No corre en pausa: `update()`
+     * retorna antes si el motor está pausado (p. ej. más de 7 km/h), así
+     * que cruzar un nodo en vehículo no avanza `posicion` (criterio 6).
      */
-    private void maybeValidateRoute() {
-        if (validationRoute == null || validationRoute.nodes.isEmpty()) return;
-        if (validationNodeIndex < 0
-                || validationNodeIndex >= validationRoute.nodes.size()) return;
+    private void maybeAdvanceRoute() {
+        if (routeProgress == null) return;
+        if (routeProgress.isFinished()) return;
         if (controlModeManager == null || emulatorBridge == null) return;
         int fixCount = controlModeManager.getRealFixCount();
         if (fixCount == lastEvaluatedFixCount) return; // sin fix nuevo
@@ -378,33 +393,74 @@ public class GameEngine {
         double[] real = controlModeManager.getRealLocation();
         RouteValidator.RomSnapshot cur =
                 RouteValidator.RomSnapshot.fromCurrentMap(emulatorBridge.getCurrentMap());
-        RouteNode node = validationRoute.nodes.get(validationNodeIndex);
-        RouteValidator.Validation v = RouteValidator.evaluate(
+        RouteProgress.Outcome outcome = routeProgress.evaluate(
                 lastRomSnapshot, cur,
                 new RouteValidator.GpsFix(real[0], real[1],
-                        controlModeManager.getRealAccuracyM()),
-                node);
+                        controlModeManager.getRealAccuracyM()));
         lastRomSnapshot = cur;
-        lastValidation = v;
-        Log.i(TAG, v.formatLog(validationNodeIndex));
+        lastValidation = outcome.validation;
+        if (outcome.validation != null) {
+            Log.i(TAG, outcome.validation.formatLog(outcome.evaluatedNodeIndex));
+        }
+        if (!outcome.changed) return;
+        Log.i(TAG, outcome.formatLog());
+        if (routeProgressFile != null) {
+            try {
+                routeProgress.save(routeProgressFile);
+            } catch (java.io.IOException e) {
+                Log.w(TAG, "No se pudo guardar el progreso de la ruta", e);
+            }
+        }
+        if (outcome.resolvedIndex >= 0 && listener != null) {
+            final int resolvedIndex = outcome.resolvedIndex;
+            mainHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (listener != null) {
+                        listener.onRouteNodeResolved(resolvedIndex);
+                    }
+                }
+            });
+        }
     }
 
     /**
-     * Spec 004, slice 3: ruta a validar (modo lectura). La pone
-     * MainActivity al cargar/regenerar la ruta; null desactiva la
-     * validación. No se guarda nada: la ruta ya vive en su archivo.
+     * Spec 004, slice 4: ruta activa + progreso (posicion/resueltos[]).
+     * La pone MainActivity al generar/importar la ruta y al cargar la ROM
+     * con ruta guardada; null desactiva el avance. Carga el progreso
+     * guardado de {@code filesDir/routes/progress_<rom_key>.json} si
+     * existe y es válido; si no existe, o es inválido, empieza en 0 (el
+     * archivo corrupto se avisa en log y se sobrescribe al primer cambio,
+     * nunca se aplica a medias).
      */
-    public void setValidationRoute(Route route) {
-        validationRoute = route;
-        validationNodeIndex = 0;
+    public void setRoute(Route route) {
+        if (route == null) {
+            routeProgress = null;
+            routeProgressFile = null;
+            lastRomSnapshot = null;
+            lastEvaluatedFixCount = -1;
+            lastValidation = null;
+            return;
+        }
+        java.io.File dir = new java.io.File(context.getFilesDir(), "routes");
+        routeProgressFile = RouteProgress.fileFor(dir, route.romKey);
+        RouteProgress loaded = null;
+        try {
+            loaded = RouteProgress.load(routeProgressFile, route);
+        } catch (RouteFormatException | java.io.IOException e) {
+            Log.w(TAG, "Progreso guardado inválido, se empieza en 0: " + e.getMessage());
+        }
+        routeProgress = (loaded != null) ? loaded : new RouteProgress(route);
         lastRomSnapshot = null;
         lastEvaluatedFixCount = -1;
         lastValidation = null;
+        Log.i(TAG, "Ruta activa: " + route.romKey + " · " + route.nodes.size()
+                + " nodos · " + routeProgress.toString());
     }
 
-    /** Spec 004, slice 3: índice del nodo a validar (por defecto, 0). */
-    public void setValidationNodeIndex(int index) {
-        validationNodeIndex = index;
+    /** Spec 004, slice 4: progreso de la ruta activa, o null si no hay. */
+    public RouteProgress getRouteProgress() {
+        return routeProgress;
     }
 
     /** Spec 004, slice 3: última validación R3, o null si aún no hay. */

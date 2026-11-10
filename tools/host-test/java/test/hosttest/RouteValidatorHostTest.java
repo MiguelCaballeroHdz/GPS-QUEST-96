@@ -42,6 +42,7 @@ public class RouteValidatorHostTest {
         consumption();
         destination();
         doubtfulReadings();
+        blockedFlag();
         cleanCaseAndLog();
         noWrites();
         System.out.println("ROUTE VALIDATOR HOST TEST OK (" + checks + " comprobaciones)");
@@ -182,6 +183,42 @@ public class RouteValidatorHostTest {
             threw = true;
         }
         check("nodo nulo se rechaza", threw);
+    }
+
+    /**
+     * Slice 4: el flag `blocked` separa las dudas que impiden ACTUAR
+     * (fix/snapshots) de las de destino (las decide la regla de destino).
+     */
+    private static void blockedFlag() {
+        RouteNode plain = plainNode();
+        RomSnapshot prev = new RomSnapshot(1, 1, 7, 4, true);
+        RomSnapshot cur = new RomSnapshot(1, 1, 7, 5, true);
+        Validation clean = RouteValidator.evaluate(prev, cur,
+                new GpsFix(NODE_LAT, NODE_LON, 5f), plain);
+        check("sin destino declarado: dudosa pero NO bloqueada",
+                clean.doubtful && !clean.blocked
+                        && clean.destination == Destination.NOT_APPLICABLE);
+        Validation imprecise = RouteValidator.evaluate(prev, cur,
+                new GpsFix(NODE_LAT, NODE_LON, 30f), plain);
+        check("fix impreciso sí bloquea", imprecise.blocked);
+        Validation unknown = RouteValidator.evaluate(prev, cur,
+                new GpsFix(NODE_LAT, NODE_LON), plain);
+        check("precisión desconocida sí bloquea", unknown.blocked);
+        Validation noFix = RouteValidator.evaluate(prev, cur, null, plain);
+        check("sin fix sí bloquea", noFix.blocked);
+        Validation noPrev = RouteValidator.evaluate(null, cur,
+                new GpsFix(NODE_LAT, NODE_LON, 5f), plain);
+        check("sin snapshot previo sí bloquea", noPrev.blocked);
+        RouteNode dest = destNode();
+        Validation mismatch = RouteValidator.evaluate(prev,
+                new RomSnapshot(1, 1, 9, 9, true),
+                new GpsFix(NODE_LAT, NODE_LON, 5f), dest);
+        check("destino distinto: dudosa pero NO bloqueada (la decide el destino)",
+                mismatch.doubtful && !mismatch.blocked
+                        && mismatch.destination == Destination.MISMATCH);
+        Validation noRom = RouteValidator.evaluate(prev,
+                RomSnapshot.invalid(), new GpsFix(NODE_LAT, NODE_LON, 5f), plain);
+        check("sin snapshot ROM válido sí bloquea", noRom.blocked);
     }
 
     private static void cleanCaseAndLog() {
