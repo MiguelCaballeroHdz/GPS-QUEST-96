@@ -46,15 +46,12 @@ import com.gpsquest96.emulator.EmulatorBridge;
 import com.gpsquest96.emulator.GameEngine;
 import com.gpsquest96.emulator.PuebloProfile;
 import com.gpsquest96.emulator.core.EmulationPipeline;
-import com.gpsquest96.render.GBMapRenderer;
+import com.gpsquest96.render.IllustratedMapRenderer;
 import com.gpsquest96.bluetooth.BluetoothService;
 import com.gpsquest96.gps.GeofenceManager;
 import com.gpsquest96.gps.LocationService;
 import com.gpsquest96.gps.OsmAccumulator;
 import com.gpsquest96.gps.OsmDataFetcher;
-import com.gpsquest96.gps.OsmTileManager;
-import com.gpsquest96.gps.TileMath;
-import com.gpsquest96.render.OsmTileLayer;
 import com.gpsquest96.gps.WeatherData;
 import com.gpsquest96.gps.WeatherService;
 import com.gpsquest96.route.Route;
@@ -103,7 +100,7 @@ public class MainActivity extends Activity implements SensorEventListener {
     private TextView tvSystemTitle;
     private TextView tvPlayerName;
     private TextView tvOptSaves;
-    /** Atribución OSM (spec 017 slice 2): visible solo con tiles activas. */
+    /** Atribución OSM (spec 018 D4): siempre visible, por los datos. */
     private TextView tvOsmAttr;
 
     private GameEngine gameEngine;
@@ -123,7 +120,6 @@ public class MainActivity extends Activity implements SensorEventListener {
     private GameRenderer gameRenderer;
     private DatabaseHelper dbHelper;
     private OsmDataFetcher osmFetcher;
-    private OsmTileManager tileManager;
     private volatile String lastOsmStatus = "Red: …";
     private volatile int lastAtlasTiles = 0;
     /**
@@ -608,17 +604,7 @@ public class MainActivity extends Activity implements SensorEventListener {
             }
         });
 
-        // Tiles raster OSM (spec 017 slice 2): descarga + caché, sin deps.
-        // El listener solo encola al renderer; la subida a textura es GL.
-        tileManager = new OsmTileManager(this);
-        tileManager.setListener(new OsmTileManager.TileListener() {
-            @Override
-            public void onTile(OsmTileManager.TileDelivery delivery) {
-                if (gameRenderer != null) gameRenderer.feedTile(delivery);
-            }
-        });
-
-        // Permisos primero, servicios despuÃ©s (o directo en KitKat)
+        // Permisos primero, servicios después (o directo en KitKat)
         // Onboarding de primer arranque; si ya existe registro, flujo normal.
         if (shouldSkipOnboarding()) {
             ensurePermissionsAndStart();
@@ -706,22 +692,9 @@ public class MainActivity extends Activity implements SensorEventListener {
         gameRenderer = new GameRenderer(gameEngine.getEmulationPipeline());
         gameRenderer.setAvatarGender(com.gpsquest96.avatar.AvatarData.genderOf(
                 new com.gpsquest96.emulator.SaveManager(this).getPlayerGender()));
-        // Atribución OSM (spec 017 slice 2): el renderer avisa, la Activity
-        // toca la UI (el GameRenderer es static: no ve MainActivity.this).
-        gameRenderer.setAttributionListener(new GameRenderer.AttributionListener() {
-            @Override
-            public void onTilesActiveChanged(final boolean active) {
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (tvOsmAttr != null) {
-                            tvOsmAttr.setVisibility(
-                                    active ? View.VISIBLE : View.GONE);
-                        }
-                    }
-                });
-            }
-        });
+        // Atribución OSM (spec 018 D4): siempre visible, por los datos
+        // (ya no depende de las tiles: el mapa ilustrado es OSM igual).
+        if (tvOsmAttr != null) tvOsmAttr.setVisibility(View.VISIBLE);
         glSurfaceView.setRenderer(gameRenderer);
         glSurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
         refreshRomTitle();
@@ -790,11 +763,6 @@ public class MainActivity extends Activity implements SensorEventListener {
         } catch (Throwable ignored) {
         }
         if (gameRenderer != null) gameRenderer.setMapZoom(z);
-        // El zoom UI cambia el nivel z de tesela: se repiden las 9 del nuevo
-        // nivel (throttle de 2 s dentro del manager; sin red, disco o nada).
-        if (lastOsmLat < 900.0 && tileManager != null) {
-            tileManager.requestArea(lastOsmLat, lastOsmLon, TileMath.zoomForUiZoom(z));
-        }
         if (announce) showBlockMessage(getString(R.string.msg_zoom_level, (int) z));
     }
 
@@ -2519,7 +2487,7 @@ public class MainActivity extends Activity implements SensorEventListener {
         if (fix == null) return;
         gameEngine.getControlModeManager().updateSimulatedPosition(
                 fix.getLatitude(), fix.getLongitude());
-        requestMapTiles(fix.getLatitude(), fix.getLongitude());
+        requestMapData(fix.getLatitude(), fix.getLongitude());
         if (gameRenderer != null && fix.hasSpeed() && fix.getSpeed() > 0.5f) {
             float bearing = fix.hasBearing() ? fix.getBearing() : 180f;
             gameRenderer.noteMovement(bearing);
@@ -2545,15 +2513,13 @@ public class MainActivity extends Activity implements SensorEventListener {
         setDirBits(bits);
     }
 
-    private void requestMapTiles(double lat, double lon) {
+    /**
+     * Centro del mapa + datos OSM (spec 018: sin tiles; la base es el
+     * pintor ilustrado sobre los datos de vector del corredor).
+     */
+    private void requestMapData(double lat, double lon) {
         if (gameRenderer != null) gameRenderer.setMapCenter(lat, lon);
         requestOsmData(lat, lon);
-        // Tiles raster OSM (spec 017 slice 2): mismo centro, zoom de tesela
-        // según el zoom UI actual (throttle de 2 s dentro del manager).
-        if (tileManager != null) {
-            float uiZoom = (gameRenderer != null) ? gameRenderer.getMapZoom() : 1f;
-            tileManager.requestArea(lat, lon, TileMath.zoomForUiZoom(uiZoom));
-        }
     }
 
     /**
@@ -2600,7 +2566,7 @@ public class MainActivity extends Activity implements SensorEventListener {
             lat = anchorLat();
             lon = anchorLon();
         }
-        requestMapTiles(lat, lon);
+        requestMapData(lat, lon);
         if (fix == null) {
             // Sin GPS (interiores): SofÃ¡ visible y jugable desde el arranque.
             gameEngine.getControlModeManager().setMode(ControlModeManager.ControlMode.SOFA);
@@ -2721,7 +2687,7 @@ public class MainActivity extends Activity implements SensorEventListener {
                             / (111320.0 * Math.cos(Math.toRadians(coords[0])));
                     gameEngine.getControlModeManager().updateSimulatedPosition(newLat, newLon);
                     // RULES Â§3: el joystick mueve el mapa pero jamÃ¡s toca pasos.
-                    requestMapTiles(newLat, newLon);
+                    requestMapData(newLat, newLon);
                     if (gameRenderer != null) {
                         gameRenderer.noteMovement((float) ((Math.toDegrees(
                                 Math.atan2(x, -y)) + 360.0) % 360.0));
@@ -2763,7 +2729,7 @@ public class MainActivity extends Activity implements SensorEventListener {
             sofaLoc.setLatitude(lat);
             sofaLoc.setLongitude(lon);
             gameEngine.getControlModeManager().updateSimulatedPosition(sofaLoc.getLatitude(), sofaLoc.getLongitude());
-            requestMapTiles(sofaLoc.getLatitude(), sofaLoc.getLongitude());
+            requestMapData(sofaLoc.getLatitude(), sofaLoc.getLongitude());
         } else if (newMode == ControlModeManager.ControlMode.GPS_REAL) {
             syncAvatarToRealGps();
         }
@@ -3098,7 +3064,6 @@ public class MainActivity extends Activity implements SensorEventListener {
         }
         if (dbHelper != null) dbHelper.shutdown();
         if (osmFetcher != null) osmFetcher.shutdown();
-        if (tileManager != null) tileManager.shutdown();
         // Puerta de Intro: onCreate pudo salir antes de inicializar el motor.
         if (gameEngine != null) gameEngine.stop();
         if (hudHandler != null) hudHandler.removeCallbacks(hudUpdater);
@@ -3174,12 +3139,8 @@ public class MainActivity extends Activity implements SensorEventListener {
         private volatile boolean spriteDirty = false;
         private boolean spriteReady = false;
         private FloatBuffer spriteQuadBuffer;
-        private GBMapRenderer gbMap;
-        // Capa de tiles OSM (spec 017 slice 2): base real o nada.
-        private OsmTileLayer tileLayer;
-        private final java.util.concurrent.ConcurrentLinkedQueue<OsmTileManager.TileDelivery> pendingTiles =
-                new java.util.concurrent.ConcurrentLinkedQueue<OsmTileManager.TileDelivery>();
-        private boolean lastTilesActive = false;
+        // Mapa ilustrado (spec 018): única base, sin raster ni tiles.
+        private IllustratedMapRenderer map;
         private volatile long lastMoveMs = 0;
         private volatile float facingDeg = 180f; // abajo por defecto
         private int frameCount = 0;
@@ -3283,9 +3244,9 @@ public class MainActivity extends Activity implements SensorEventListener {
         }
 
         /**
-         * Recibe el raster OSM (hilo worker â†’ hilo GL, swap volÃ¡til).
+         * Recibe los datos OSM (hilo worker â†’ hilo GL, swap volÃ¡til).
          * spec 015 B2/D-23: el worker suele entregar los datos ANTES de que
-         * exista `gbMap` (se crea en onSurfaceCreated, hilo GL). Se guarda el
+         * exista `map` (se crea en onSurfaceCreated, hilo GL). Se guarda el
          * Ãºltimo payload y se aplica en cuanto el mapa nace; si no, el
          * lienzo se queda plano hasta moverse 30 m.
          */
@@ -3295,20 +3256,20 @@ public class MainActivity extends Activity implements SensorEventListener {
             pendingOsmLat = centerLat;
             pendingOsmLon = centerLon;
             pendingOsmReady = true;
-            if (gbMap != null) {
-                gbMap.setElements(elements, centerLat, centerLon);
+            if (map != null) {
+                map.setElements(elements, centerLat, centerLon);
                 pendingOsmReady = false;
             }
         }
 
         /**
          * Nodos de la Ruta Maestra (spec 004 slice 2, hilo worker → hilo GL).
-         * Mismo patrón que el raster: si el mapa aún no existe, se guarda.
+         * Mismo patrón que los datos OSM: si el mapa aún no existe, se guarda.
          */
         public void feedRouteNodes(java.util.List<RouteNode> nodes) {
             pendingRoute = nodes;
-            if (gbMap != null) {
-                gbMap.setRouteNodes(nodes);
+            if (map != null) {
+                map.setRouteNodes(nodes);
                 pendingRoute = null;
             }
         }
@@ -3324,61 +3285,12 @@ public class MainActivity extends Activity implements SensorEventListener {
          * Zoom UI delegado al mapa (cromo, hilo seguro: volatile).
          */
         public void setMapZoom(float z) {
-            if (gbMap != null) gbMap.setZoom(z);
+            if (map != null) map.setZoom(z);
         }
 
-        /** Zoom UI actual del mapa (1.0f sin mapa): lo usa el nivel z de tesela. */
+        /** Zoom UI actual del mapa (1.0f sin mapa). */
         public float getMapZoom() {
-            return (gbMap != null) ? gbMap.getZoom() : 1f;
-        }
-
-        /**
-         * Recibe una tesela lista (hilo worker → hilo GL, cola volátil).
-         * Acotada a 36 entregas: si el GL va por detrás, se sueltan las más
-         * viejas (el manager las repone en el próximo requestArea).
-         */
-        public void feedTile(OsmTileManager.TileDelivery delivery) {
-            if (delivery == null || delivery.bitmap == null) return;
-            while (pendingTiles.size() >= 36) pendingTiles.poll();
-            pendingTiles.offer(delivery);
-        }
-
-        /** Drena hasta 2 entregas de tiles por frame y las sube a textura. */
-        private void drainTiles() {
-            if (tileLayer == null) return;
-            for (int i = 0; i < 2; i++) {
-                OsmTileManager.TileDelivery d = pendingTiles.poll();
-                if (d == null) return;
-                tileLayer.setTileCentered(d.z, d.cx, d.cy, d.x, d.y, d.bitmap);
-            }
-        }
-
-        /** Atribución OSM (spec 017 slice 2): el renderer avisa, la Activity
-         *  toca la UI (el GameRenderer es static: no ve MainActivity.this). */
-        public interface AttributionListener {
-            void onTilesActiveChanged(boolean active);
-        }
-
-        private volatile AttributionListener attributionListener;
-
-        public void setAttributionListener(AttributionListener listener) {
-            attributionListener = listener;
-        }
-
-        /**
-         * Atribución OSM visible solo con tiles activas (spec 017 slice 2).
-         * Solo avisa cuando cambia el estado.
-         */
-        private void updateAttribution(boolean tilesActive) {
-            if (tilesActive == lastTilesActive) return;
-            lastTilesActive = tilesActive;
-            AttributionListener l = attributionListener;
-            if (l != null) {
-                try {
-                    l.onTilesActiveChanged(tilesActive);
-                } catch (Throwable ignored) {
-                }
-            }
+            return (map != null) ? map.getZoom() : 1f;
         }
 
         private int compileShader(int type, String src) {
@@ -3463,7 +3375,7 @@ public class MainActivity extends Activity implements SensorEventListener {
             // spec 015 B2/D-10: el punto neutro mide lo mismo que el sprite
             // (1 celda del mapa) para que la posiciÃ³n no "flote" al hacer zoom.
             float px = 0f;
-            if (gbMap != null) px = gbMap.cellPixels();
+            if (map != null) px = map.cellPixels();
             if (px <= 0f) px = Math.min(surfW, surfH) * MARKER_H;
             if (px < 32f) px = 32f;
             float qh = (surfH > 0) ? (px / surfH) * 2f : MARKER_H;
@@ -3488,7 +3400,7 @@ public class MainActivity extends Activity implements SensorEventListener {
             // en vez de flotar a 1/6 de pantalla. Precedente: el viejo
             // PlayerRenderer 16x24, misma convencion de UV invertida.
             float px = 0f;
-            if (gbMap != null) px = gbMap.cellPixels();
+            if (map != null) px = map.cellPixels();
             if (px <= 0f) px = Math.min(surfW, surfH) * SPRITE_FRAC;
             if (px < 32f) px = 32f;
             float w = surfW > 0 ? (px / surfW) * 2f : 0.2f;
@@ -3506,7 +3418,7 @@ public class MainActivity extends Activity implements SensorEventListener {
             spriteTexBuffer = floatBufferOf(new float[]{
                     0f, 1f, 1f, 1f,
                     0f, 0f, 1f, 0f});
-            spriteQuadZoom = (gbMap != null) ? gbMap.getZoom() : 1f;
+            spriteQuadZoom = (map != null) ? map.getZoom() : 1f;
         }
 
         private void createFrameTexture() {
@@ -3614,7 +3526,7 @@ public class MainActivity extends Activity implements SensorEventListener {
                 atlasDirty = false;
                 // spec 015 B3b: desde aquÃ­ el mapa puede pintar pixel art real
                 // (antes el atlas existÃ­a en GL pero nadie lo muestreaba).
-                if (gbMap != null) gbMap.setAtlasTexture(atlasTexId);
+                // (spec 018: el mapa ilustrado no muestrea el atlas VRAM).
             } catch (Throwable t) {
                 Log.w("GameEngine", "Atlas upload omitido", t);
             }
@@ -3712,31 +3624,24 @@ public class MainActivity extends Activity implements SensorEventListener {
             createFrameTexture();
             createAtlasTexture();
             createSpriteTexture();
-            gbMap = new GBMapRenderer();
-            if (!gbMap.initialize()) {
-                Log.e("GameEngine", "Mapa GBC rechazado: sin capa de mapa");
-                gbMap = null;
+            // Mapa ilustrado (spec 018): única base, sin raster ni tiles.
+            map = new IllustratedMapRenderer();
+            if (!map.initialize()) {
+                Log.e("GameEngine", "Mapa ilustrado rechazado: sin capa de mapa");
+                map = null;
             } else {
-                gbMap.setViewport(surfW, surfH);
-                // spec 015 D-23: el raster pudo llegar antes que el mapa.
+                map.setViewport(surfW, surfH);
+                // spec 015 D-23: los datos pudieron llegar antes que el mapa.
                 if (pendingOsmReady) {
-                    gbMap.setElements(pendingOsm, pendingOsmLat, pendingOsmLon);
+                    map.setElements(pendingOsm, pendingOsmLat, pendingOsmLon);
                     pendingOsmReady = false;
                     Log.i("GameEngine", "OSM pendiente aplicado al mapa");
                 }
                 if (pendingRoute != null) {
-                    gbMap.setRouteNodes(pendingRoute);
+                    map.setRouteNodes(pendingRoute);
                     pendingRoute = null;
                     Log.i("GameEngine", "Ruta pendiente aplicada al mapa");
                 }
-            }
-            // Capa de tiles OSM (spec 017 slice 2): base real bajo avatar/POIs.
-            tileLayer = new OsmTileLayer();
-            if (!tileLayer.initialize()) {
-                Log.e("GameEngine", "Tiles OSM rechazados: solo respaldo raster");
-                tileLayer = null;
-            } else {
-                tileLayer.setViewport(surfW, surfH);
             }
         }
 
@@ -3747,8 +3652,7 @@ public class MainActivity extends Activity implements SensorEventListener {
             surfH = height;
             buildMarkerQuad(); // punto neutro con la superficie real
             buildSpriteQuad(); // sprite OW con la superficie real
-            if (gbMap != null) gbMap.setViewport(width, height); // celdas cuadradas
-            if (tileLayer != null) tileLayer.setViewport(width, height);
+            if (map != null) map.setViewport(width, height);
         }
 
         /**
@@ -3925,26 +3829,15 @@ public class MainActivity extends Activity implements SensorEventListener {
                     // Modo Juego: la ROM manda (intro 100% intacta y opaca).
                     drawPpuFullscreen(1.0f);
                 } else {
-                    // spec 015 B1: Vista: Mapa = solo datos OSM, capa Ãºnica y
-                    // opaca. Sin datos no se pinta terreno (ni pasto procedural
-                    // ni damero): queda el glClearColor. La PPU no se mezcla
-                    // aquÃ­; se ve a pantalla completa en Vista: Juego.
-                    // spec 017 slice 2: UNA sola capa base. Tiles si el marco
-                    // cubre el viewport; si no, raster pixel art. Nunca ambas.
-                    boolean tilesDrawn = false;
-                    if (tileLayer != null) {
-                        drainTiles();
-                        float cellPx = (gbMap != null) ? gbMap.cellPixels() : 0f;
-                        if (cellPx > 0f) {
-                            tilesDrawn = tileLayer.draw(mapLat, mapLon, cellPx, surfW, surfH);
-                        }
-                    }
-                    if (!tilesDrawn && gbMap != null) gbMap.draw(mapLat, mapLon);
-                    updateAttribution(tilesDrawn);
+                    // spec 018: UNA sola capa base, el mapa ilustrado. Sin
+                    // datos de vector es pergamino (D5), nunca raster ni
+                    // tiles. La PPU no se mezcla aquí; se ve a pantalla
+                    // completa en Vista: Juego.
+                    if (map != null) map.draw(mapLat, mapLon);
                     if (gridProgram != 0) {
                         // spec 015 B2/D-10: el quad del avatar se rehace
                         // cuando cambia el zoom.
-                        if (gbMap != null && gbMap.getZoom() != spriteQuadZoom) {
+                        if (map != null && map.getZoom() != spriteQuadZoom) {
                             buildSpriteQuad();
                         }
                         // Avatar propio de Miguel; punto blanco si aun no hay.

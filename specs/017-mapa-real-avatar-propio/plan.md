@@ -58,9 +58,9 @@ Regla: ningún slice de código se ejecuta hasta que la spec esté APROBADA.
 
 ### Slice 3 — Integración (tiles + POIs/ruta + avatar + respaldo + atribución)
 
-**Estado: PENDIENTE (depende del Slice 2).**
+**Estado: SUPERSEDED 2026-11-10 (decisión de Miguel: el pixel art queda sepultado para siempre y el mapa pasa a ser ilustrado, spec 018).** La integración que faltaba se hace en la 018 Slice 1 (pintor ilustrado + sepultura del raster y las tiles); el Slice 3 de la 017 no se ejecuta.
 
-**Objetivo:** Todo junto: tiles reales, POIs y ruta encima, avatar propio, respaldo pixel art sin conexión, atribución en UI.
+**Objetivo (ya no vigente):** Todo junto: tiles reales, POIs y ruta encima, avatar propio, respaldo pixel art sin conexión, atribución en UI.
 
 **Tareas**
 1. Orden de capas: tiles → raster de respaldo (solo sin tile) → POIs/ruta → avatar.
