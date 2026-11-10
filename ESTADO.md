@@ -13,7 +13,7 @@ Resumen de `memory/archivo/estado_actual-2026-11.md` + `tasks-2026-11.md`. Solo 
 - 007 CGB: slices 1-2 + timing parcial verdes; gate POCO parcial (Gen 2 en color, `CONTINUE` OK). Falta caminar el cuarto de Gen 1 en DMG; HDMA HBlank solo si el overworld falla.
 - 008 Guardado real + `.pueblo`: slices 1-2 hechos; falta la prueba destructiva (`pm clear` u otro equipo) y guardar en Gen 1 (DMG).
 - 009 B2 spawns: slices 1-2 hechos (tablas + mapa actual); el slice 3 (inyección por paso real) no está en el árbol y depende de 016.
-- B4 sprite OW: código y DMA de OAM listos; falta la foto del overworld en POCO (`hits=3` ya confirmado). Fix flips 2026-11-10 (rama `fix-sprite-flips`): flips OAM de la entrada TL cableados a `composeSprite` + giro inmediato sin esperar confirmación; host 33 comprobaciones, 0 fallos. Falta verificar caminando en POCO que ya no se divide.
+- B4 sprite OW: código y DMA de OAM listos; falta la foto del overworld en POCO (`hits=3` ya confirmado). Fix flips 2026-11-10 (rama `fix-sprite-flips`): flips OAM de la entrada TL cableados a `composeSprite` + giro inmediato sin esperar confirmación; host 33 comprobaciones, 0 fallos. El sprite ROM ya no se dibuja en el mapa desde 017 slice 1 (avatar propio de Miguel); la verificación de los flips en POCO queda sustituida por la del avatar.
 - Deudas abiertas: APU (audio), timing fino CPU/PPU, RTC MBC3.
 
 **Mapeo y avance**
@@ -24,10 +24,11 @@ Resumen de `memory/archivo/estado_actual-2026-11.md` + `tasks-2026-11.md`. Solo 
 - Criterio §7.8 (POI real → Punto de Restauración) pendiente de prueba en calle.
 - 005 gating: bloqueado por el dump POCO (slice 5c, `SRAM_FLAG_MAP`).
 - 016 arquitectura base genérica: spec APROBADA 2026-11-09, slices 1-4 en el árbol (estado genérico + corredor diagonal); ya no bloquea 004 (3-5) ni 009 (3).
+- 017 mapa real y avatar propio: spec APROBADA 2026-11-10 (decisión de Miguel: "Mapa normal + sprite propio"). Slice 1 hecho en host (rama `017-slice-1`): avatar propio de Miguel en el mapa (12 cuadros 32x56, chico/chica, frente/espalda/lado, caminata por movimiento); sprite ROM retirado del mapa. Host 167 comprobaciones nuevas, total 457, 0 fallos. Pendiente: build en PC + verificar en POCO que el avatar camina sin dividirse. Slices 2 (tiles OSM) y 3 (integración) pendientes.
 
 **Defectos de campo (Task 28, caminata 2026-11-06)**
 - B. Notificaciones del sistema sobre la UI → modo inmersivo estable.
-- C. Sprite del entrenador cortado/dividido → corregido en `fix-sprite-flips` (flips OAM cableados, 33 checks host); pendiente verificar caminando en POCO.
+- C. Sprite del entrenador cortado/dividido → el camino ROM quedó retirado en 017 slice 1 (avatar propio de Miguel, 167 checks host); pendiente verificar en POCO que el avatar camina sin dividirse.
 - D. Movimiento a saltos por drift GPS → `WalkFilter` (015 B4).
 - E. Salto de mapa y recarga de tiles → caché por celda; lo corrige 004 slice 2.
 - F. Bloque verde oscuro al inicio → fallback sin datos OSM + carga en frío.

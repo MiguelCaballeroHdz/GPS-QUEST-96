@@ -128,35 +128,32 @@ public class MainActivity extends Activity implements SensorEventListener {
             new java.util.ArrayList<OsmDataFetcher.OsmElement>();
     private volatile String lastRouteStatus = "Ruta: sin ancla";
     private volatile int routeNodeCount = 0;
-    private final com.gpsquest96.render.SpriteExtractor spriteExtractor =
-            new com.gpsquest96.render.SpriteExtractor();
-    // Buffers reutilizados por el worker (sin basura por frame).
+    // Buffers reutilizados por el worker (sin basura por frame). Solo vramBuf:
+    // el atlas de tiles VRAM (TileAtlas). Los buffers del sprite ROM y el
+    // extractor se retiraron en la spec 017 slice 1: el mapa ya no dibuja
+    // el sprite extraido de la ROM.
     private final byte[] vramBuf = new byte[8192];
-    private final byte[] vram1Buf = new byte[8192];
-    private final byte[] objPalBuf = new byte[64];
-    private final byte[] oamBuf = new byte[com.gpsquest96.render.SpriteExtractor.OAM_SIZE];
     private long lastAtlasErrorLogMs = 0;
 
     /**
      * Foto de tiles VRAM en el worker throttled (6 KB por JNI, sin hilos
-     * nuevos): prueba viva de extracciÃ³n ROM (B1). Corre con y sin red,
+     * nuevos): el atlas de tiles del mapa (B3b). Corre con y sin red,
      * porque la VRAM no depende de Overpass.
      * <p>
-     * synchronized: la llaman el hilo de emulaciÃ³n y el worker de OSM; ambos
-     * comparten vramBuf/oamBuf y el estado interno de SpriteExtractor.
+     * synchronized: la llaman el hilo de emulacion y el worker de OSM; ambos
+     * comparten vramBuf. El sprite del mapa ya no sale de la ROM (spec 017
+     * slice 1: avatar propio de Miguel); el extractor queda sin uso.
      */
     private synchronized void refreshAtlasSnapshot() {
         try {
             if (gameEngine != null && gameEngine.getEmulationPipeline() != null) {
                 com.gpsquest96.emulator.core.EmulationPipeline.Mmu mmu =
                         gameEngine.getEmulationPipeline().getMmu();
-                // UN cruce JNI por banco (antes: 6.144 + 8.192 byte a byte).
-                // Banco explicito: read() depende de VBK (lo cambia el juego),
-                // y el OBJ del jugador vive en el banco 1 (atributo OAM 0x08).
+                // Un cruce JNI (antes: 6.144 + 8.192 byte a byte). Solo el
+                // banco 0: el atlas de tiles vive ahi. El banco 1 era del
+                // sprite ROM, retirado en la spec 017 slice 1.
                 mmu.readVramBlock(0, 0x8000, vramBuf, vramBuf.length);
-                mmu.readVramBlock(1, 0x8000, vram1Buf, vram1Buf.length);
                 byte[] vram = vramBuf;
-                byte[] vram1 = vram1Buf;
                 com.gpsquest96.render.TileAtlas snapshot =
                         com.gpsquest96.render.TileAtlas.fromVram(
                                 vram, mmu.read(com.gpsquest96.render.TileAtlas.BGP_ADDR) & 0xFF);
@@ -178,40 +175,16 @@ public class MainActivity extends Activity implements SensorEventListener {
                 if (gameRenderer != null && lastAtlasTiles > 0) {
                     gameRenderer.setAtlasPixels(snapshot.getAtlasPixels());
                 }
-                // Identificar sprite OW desde estado ROM en vivo (B4, spec 003).
-                // 1) diff de VRAM con movimiento; 2) respaldo OAM centrada (Gen 1).
-                java.util.List<Integer> candidates = spriteExtractor.findChangedTiles(vram);
-                if (!candidates.isEmpty()) {
-                    android.util.Log.i("SpriteExtractor", "tiles cambiados (jugador moviéndose): "
-                            + candidates.size() + " → "
-                            + candidates.subList(0, Math.min(8, candidates.size())));
-                }
-                mmu.readOamSnapshot(oamBuf);
-                byte[] oam = oamBuf;
-                int obp0 = mmu.read(com.gpsquest96.render.SpriteExtractor.OBP0_ADDR) & 0xFF;
-                mmu.readObjPaletteBlock(objPalBuf);
-                int[] spriteTiles = spriteExtractor.identifySprite(vram, vram1, oam, candidates);
-                if (spriteTiles != null && gameRenderer != null) {
-                    // Flips OAM (fix-sprite-flips): sin ellos el sprite se
-                    // compone sin voltear y se ve dividido al caminar.
-                    int[] spritePixels = spriteExtractor.composeSprite(
-                            vram, vram1, spriteTiles[0], spriteExtractor.getSpriteBank(),
-                            objPalBuf, spriteExtractor.getSpritePalette(), obp0,
-                            spriteExtractor.getSpriteFlipX(), spriteExtractor.getSpriteFlipY());
-                    if (spritePixels != null) {
-                        // worker â†’ hilo GL (volatile), igual que el atlas.
-                        gameRenderer.setSpritePixels(spritePixels);
-                    }
-                } else if (gameRenderer != null) {
-                    // Sin evidencia confirmada: no dejar pegado el Ãºltimo sprite.
-                    gameRenderer.clearSpritePixels();
-                }
+                // Spec 017 slice 1: el sprite del mapa es el avatar propio
+                // de Miguel (AvatarSprites); ya no se identifica ni se
+                // compone nada desde la ROM. El GameRenderer elige el cuadro
+                // en el hilo GL segun rumbo y movimiento (updateAvatarSprite).
             }
         } catch (Throwable t) {
             long now = android.os.SystemClock.elapsedRealtime();
             if (now - lastAtlasErrorLogMs > 5000) {
                 lastAtlasErrorLogMs = now;
-                android.util.Log.w("SpriteExtractor", "Snapshot VRAM/OAM falló", t);
+                android.util.Log.w("AtlasSnapshot", "Snapshot VRAM falló", t);
             }
         }
     }
@@ -713,7 +686,8 @@ public class MainActivity extends Activity implements SensorEventListener {
             glSurfaceView.setPreserveEGLContextOnPause(true);
         }
         gameRenderer = new GameRenderer(gameEngine.getEmulationPipeline());
-        gameRenderer.setSpriteExtractor(spriteExtractor);
+        gameRenderer.setAvatarGender(com.gpsquest96.avatar.AvatarData.genderOf(
+                new com.gpsquest96.emulator.SaveManager(this).getPlayerGender()));
         glSurfaceView.setRenderer(gameRenderer);
         glSurfaceView.setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
         refreshRomTitle();
@@ -3102,7 +3076,7 @@ public class MainActivity extends Activity implements SensorEventListener {
         private int atlasTexId = 0;
         private volatile int[] atlasPixels = null;
         private volatile boolean atlasDirty = false;
-        // Sprite OW compuesto desde VRAM (16x16 ARGB, Ã­ndice 0 transparente).
+        // Avatar propio de Miguel (32x56 ARGB, indice 0 transparente).
         private int spriteTexId = 0;
         private volatile int[] spritePixels = null;
         private volatile boolean spriteDirty = false;
@@ -3140,11 +3114,11 @@ public class MainActivity extends Activity implements SensorEventListener {
         }
 
         /**
-         * Recibe el sprite OW compuesto (16x16 ARGB) desde el worker.
+         * Recibe el cuadro del avatar propio (32x56 ARGB, spec 017 slice 1).
          * volatile: el hilo GL lo sube en el prÃ³ximo frame.
          */
         public void setSpritePixels(int[] pixels) {
-            if (pixels == null || pixels.length != 16 * 16) return;
+            if (pixels == null || pixels.length != com.gpsquest96.avatar.AvatarSprites.FRAME_W * com.gpsquest96.avatar.AvatarSprites.FRAME_H) return;
             spritePixels = pixels;
             spriteDirty = true;
         }
@@ -3162,20 +3136,46 @@ public class MainActivity extends Activity implements SensorEventListener {
         }
 
         /**
-         * Marca movimiento + rumbo (joystick atan2 o bearing GPS).
-         * Reservado para orientar el futuro sprite OW de la ROM (B4).
+         * Marca movimiento + rumbo (joystick atan2 o bearing GPS). El avatar
+         * propio (spec 017 slice 1) lo usa para elegir direccion y paso.
          */
         public void noteMovement(float degrees) {
             lastMoveMs = System.currentTimeMillis();
             facingDeg = degrees;
-            if (spriteExtractor != null) spriteExtractor.notePlayerMove();
         }
 
-        public void setSpriteExtractor(com.gpsquest96.render.SpriteExtractor se) {
-            spriteExtractor = se;
+        // Avatar propio (spec 017 slice 1): genero del perfil + cuadro actual.
+        private com.gpsquest96.avatar.AvatarData.Gender avatarGender =
+                com.gpsquest96.avatar.AvatarData.Gender.BOY;
+        private int lastAvatarKey = -1;
+
+        /** Genero del perfil (IntroActivity / SaveManager); BOY por defecto. */
+        public void setAvatarGender(com.gpsquest96.avatar.AvatarData.Gender gender) {
+            if (gender != null) avatarGender = gender;
+            lastAvatarKey = -1; // fuerza la subida del cuadro que toque
         }
 
-        private com.gpsquest96.render.SpriteExtractor spriteExtractor = null;
+        /**
+         * Elige el cuadro del avatar segun rumbo y movimiento y lo sube si
+         * cambio. Hilo GL, cada frame: el paso alterna cada 180 ms mientras
+         * hay movimiento; parado = cuadro A. Sin hilos nuevos.
+         */
+        private void updateAvatarSprite() {
+            com.gpsquest96.avatar.AvatarSprites.Direction dir =
+                    com.gpsquest96.avatar.AvatarSprites.directionFor(facingDeg);
+            boolean mirror = com.gpsquest96.avatar.AvatarSprites.mirrorFor(facingDeg);
+            int phase = com.gpsquest96.avatar.AvatarSprites.phaseFor(
+                    System.currentTimeMillis(), lastMoveMs);
+            int key = (avatarGender.ordinal() * 100)
+                    + (dir.ordinal() * 10) + phase * 2 + (mirror ? 1 : 0);
+            if (key == lastAvatarKey) return;
+            lastAvatarKey = key;
+            int[] px = mirror
+                    ? com.gpsquest96.avatar.AvatarSprites.pixelsMirrored(avatarGender, dir, phase)
+                    : com.gpsquest96.avatar.AvatarSprites.pixels(avatarGender, dir, phase);
+            setSpritePixels(px);
+        }
+
 
         /**
          * PosiciÃ³n exacta para el offset sub-pÃ­xel (hilo UI â†’ hilo GL).
@@ -3305,7 +3305,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 
         /**
          * Punto neutro de posicion (VISION.md: cromo de UI, no contenido).
-         * Blanco sobre verde GB; el sprite OW de la ROM lo reemplaza (B4).
+         * Blanco sobre verde GB; el avatar propio lo reemplaza (spec 017 slice 1).
          * qw = qh * (surfH/surfW) para pixeles cuadrados.
          */
         private void buildMarkerQuad() {
@@ -3324,22 +3324,28 @@ public class MainActivity extends Activity implements SensorEventListener {
                     -hw, hh, hw, hh});
         }
 
-        // â”€â”€ Quad del sprite OW (16x16 escalado, centrado) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ---- Quad del avatar propio (32x56 escalado, centrado) ----
         private static final float SPRITE_FRAC = 1f / 6f; // respaldo sin mapa
         private FloatBuffer spriteTexBuffer;
         /** Zoom con el que se dimensionÃ³ el quad (spec 015 B2/D-10). */
         private float spriteQuadZoom = -1f;
 
         private void buildSpriteQuad() {
-            // spec 015 B2/D-10: el personaje ocupa ~1 celda del mapa (la
-            // convenciÃ³n del overworld GB: jugador = 1 tile de 8x8), asÃ­ que
-            // crece y decrece con el zoom en vez de flotar a 1/6 de pantalla.
+            // spec 015 B2/D-10 + spec 017 slice 1: el avatar ocupa 1 celda de
+            // ANCHO y conserva la proporcion del cuadro (32x56, alto 1,75
+            // celdas), centrado en la posicion. Crece y decrece con el zoom
+            // en vez de flotar a 1/6 de pantalla. Precedente: el viejo
+            // PlayerRenderer 16x24, misma convencion de UV invertida.
             float px = 0f;
             if (gbMap != null) px = gbMap.cellPixels();
             if (px <= 0f) px = Math.min(surfW, surfH) * SPRITE_FRAC;
             if (px < 32f) px = 32f;
             float w = surfW > 0 ? (px / surfW) * 2f : 0.2f;
-            float h = surfH > 0 ? (px / surfH) * 2f : 0.2f;
+            float h = surfH > 0
+                    ? (px * com.gpsquest96.avatar.AvatarSprites.FRAME_H
+                            / com.gpsquest96.avatar.AvatarSprites.FRAME_W / surfH) * 2f
+                    : 0.2f * com.gpsquest96.avatar.AvatarSprites.FRAME_H
+                            / com.gpsquest96.avatar.AvatarSprites.FRAME_W;
             float hw = w / 2f;
             float hh = h / 2f;
             spriteQuadBuffer = floatBufferOf(new float[]{
@@ -3463,7 +3469,7 @@ public class MainActivity extends Activity implements SensorEventListener {
             }
         }
 
-        // â”€â”€ Textura del sprite OW (16x16, RGBA, NEAREST) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ---- Textura del avatar propio (32x56, RGBA, NEAREST) ----
         private void createSpriteTexture() {
             int[] tex = new int[1];
             GLES20.glGenTextures(1, tex, 0);
@@ -3478,13 +3484,13 @@ public class MainActivity extends Activity implements SensorEventListener {
             GLES20.glTexParameteri(GLES20.GL_TEXTURE_2D,
                     GLES20.GL_TEXTURE_WRAP_T, GLES20.GL_CLAMP_TO_EDGE);
             java.nio.ByteBuffer empty = java.nio.ByteBuffer.allocateDirect(
-                    16 * 16 * 4).order(java.nio.ByteOrder.nativeOrder());
-            for (int i = 0; i < 16 * 16; i++) {
+                    com.gpsquest96.avatar.AvatarSprites.FRAME_W * com.gpsquest96.avatar.AvatarSprites.FRAME_H * 4).order(java.nio.ByteOrder.nativeOrder());
+            for (int i = 0; i < com.gpsquest96.avatar.AvatarSprites.FRAME_W * com.gpsquest96.avatar.AvatarSprites.FRAME_H; i++) {
                 empty.put((byte) 0).put((byte) 0).put((byte) 0).put((byte) 0);
             }
             empty.position(0);
             GLES20.glTexImage2D(GLES20.GL_TEXTURE_2D, 0, GLES20.GL_RGBA,
-                    16, 16, 0, GLES20.GL_RGBA,
+                    com.gpsquest96.avatar.AvatarSprites.FRAME_W, com.gpsquest96.avatar.AvatarSprites.FRAME_H, 0, GLES20.GL_RGBA,
                     GLES20.GL_UNSIGNED_BYTE, empty);
         }
 
@@ -3498,8 +3504,8 @@ public class MainActivity extends Activity implements SensorEventListener {
             }
             try {
                 java.nio.ByteBuffer buf = java.nio.ByteBuffer.allocateDirect(
-                        16 * 16 * 4).order(java.nio.ByteOrder.nativeOrder());
-                for (int i = 0; i < 16 * 16; i++) {
+                        com.gpsquest96.avatar.AvatarSprites.FRAME_W * com.gpsquest96.avatar.AvatarSprites.FRAME_H * 4).order(java.nio.ByteOrder.nativeOrder());
+                for (int i = 0; i < com.gpsquest96.avatar.AvatarSprites.FRAME_W * com.gpsquest96.avatar.AvatarSprites.FRAME_H; i++) {
                     int px = spritePixels[i];
                     // ByteBuffer RGBA: el ARGB de Java es 0xAARRGGBB.
                     buf.put((byte) ((px >> 16) & 0xFF)); // R
@@ -3510,7 +3516,7 @@ public class MainActivity extends Activity implements SensorEventListener {
                 buf.position(0);
                 GLES20.glBindTexture(GLES20.GL_TEXTURE_2D, spriteTexId);
                 GLES20.glTexSubImage2D(GLES20.GL_TEXTURE_2D, 0, 0, 0,
-                        16, 16, GLES20.GL_RGBA,
+                        com.gpsquest96.avatar.AvatarSprites.FRAME_W, com.gpsquest96.avatar.AvatarSprites.FRAME_H, GLES20.GL_RGBA,
                         GLES20.GL_UNSIGNED_BYTE, buf);
                 spriteDirty = false;
                 spriteReady = true;
@@ -3677,7 +3683,7 @@ public class MainActivity extends Activity implements SensorEventListener {
 
         /**
          * Punto neutro de posicion (VISION.md): quad blanco sobre el mapa.
-         * Sin sprites propios; el sprite OW de la ROM lo reemplaza (B4).
+         * Sin avatar listo; el avatar propio lo reemplaza (spec 017 slice 1).
          */
         private void drawMarker() {
             if (!gridOk || markerBuffer == null) return;
@@ -3698,7 +3704,7 @@ public class MainActivity extends Activity implements SensorEventListener {
         }
 
         /**
-         * Sprite OW de la ROM sobre el mapa (B4). false = sin sprite listo,
+         * Avatar propio sobre el mapa (spec 017 slice 1). false = sin sprite listo,
          * el llamador conserva el punto blanco neutro (RF-04).
          */
         private boolean drawSprite() {
@@ -3751,6 +3757,9 @@ public class MainActivity extends Activity implements SensorEventListener {
                 GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT);
                 boolean ppuValid = uploadPpuTexture();
                 uploadAtlasTexture();
+                // Avatar propio (spec 017 slice 1): el cuadro se elige aqui
+                // para que la subida del sprite lo recoja en este mismo frame.
+                if (!ppuFullscreen) updateAvatarSprite();
                 uploadSpriteTexture();
                 if (ppuFullscreen && ppuValid) {
                     // Modo Juego: la ROM manda (intro 100% intacta y opaca).
@@ -3762,12 +3771,12 @@ public class MainActivity extends Activity implements SensorEventListener {
                     // aquÃ­; se ve a pantalla completa en Vista: Juego.
                     if (gbMap != null) gbMap.draw(mapLat, mapLon);
                     if (gridProgram != 0) {
-                        // spec 015 B2/D-10: el quad del sprite va a 2 celdas y
-                        // debe rehacerse cuando cambia el zoom.
+                        // spec 015 B2/D-10: el quad del avatar se rehace
+                        // cuando cambia el zoom.
                         if (gbMap != null && gbMap.getZoom() != spriteQuadZoom) {
                             buildSpriteQuad();
                         }
-                        // Sprite OW extraÃ­do de la ROM; punto blanco si aÃºn no hay.
+                        // Avatar propio de Miguel; punto blanco si aun no hay.
                         if (!drawSprite()) drawMarker();
                     }
                 }
