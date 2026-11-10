@@ -24,7 +24,7 @@ Resumen de `memory/archivo/estado_actual-2026-11.md` + `tasks-2026-11.md`. Solo 
 - Criterio §7.8 (POI real → Punto de Restauración) pendiente de prueba en calle.
 - 005 gating: bloqueado por el dump POCO (slice 5c, `SRAM_FLAG_MAP`).
 - 016 arquitectura base genérica: spec APROBADA 2026-11-09, slices 1-4 en el árbol (estado genérico + corredor diagonal); ya no bloquea 004 (3-5) ni 009 (3).
-- 017 mapa real y avatar propio: spec APROBADA 2026-11-10 (decisión de Miguel: "Mapa normal + sprite propio"). Slice 1 hecho en host (rama `017-slice-1`): avatar propio de Miguel en el mapa (12 cuadros 32x56, chico/chica, frente/espalda/lado, caminata por movimiento); sprite ROM retirado del mapa. Host 167 comprobaciones nuevas, total 457, 0 fallos. Pendiente: build en PC + verificar en POCO que el avatar camina sin dividirse. Slices 2 (tiles OSM) y 3 (integración) pendientes.
+- 017 mapa real y avatar propio: spec APROBADA 2026-11-10 (decisión de Miguel: "Mapa normal + sprite propio"). Slice 1 hecho en host (rama `017-slice-1`): avatar propio de Miguel en el mapa (12 cuadros 32x56, chico/chica, frente/espalda/lado, caminata por movimiento); sprite ROM retirado del mapa. Host 167 comprobaciones nuevas, total 457, 0 fallos. Slice 2 hecho en host (rama `017-slice-2`): capa de tiles OSM (descarga + caché 7 días + atribución, rejilla 3x3, una sola capa base: tiles o raster, nunca ambas). Host 93 comprobaciones nuevas (`TileMathHostTest`), total 550, 0 fallos. Pendiente: build en PC + verificar en POCO (mapa real con calles y nombres, avatar encima; sin conexión, respaldo raster). Slice 3 (integración) pendiente.
 
 **Defectos de campo (Task 28, caminata 2026-11-06)**
 - B. Notificaciones del sistema sobre la UI → modo inmersivo estable.

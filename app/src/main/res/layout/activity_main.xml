@@ -432,4 +432,20 @@
 
     </LinearLayout>
 
+    <!-- Atribución OSM (spec 017 slice 2): visible solo con tiles activas.
+         La exige la política de uso de tiles de OpenStreetMap. -->
+    <TextView
+        android:id="@+id/tv_osm_attr"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="4dp"
+        android:background="#80000000"
+        android:padding="3dp"
+        android:text="© OpenStreetMap contributors"
+        android:textColor="#FFFFFF"
+        android:textSize="10sp"
+        android:fontFamily="monospace"
+        android:visibility="gone" />
+
 </FrameLayout>

@@ -36,6 +36,7 @@ $sources = @($stubs) + @(
     (Join-Path $root "app\src\main\java\com\gpsquest96\gps\GeofenceManager.java"),
     (Join-Path $root "app\src\main\java\com\gpsquest96\gps\OsmAccumulator.java"),
     (Join-Path $root "app\src\main\java\com\gpsquest96\gps\OsmDataFetcher.java"),
+    (Join-Path $root "app\src\main\java\com\gpsquest96\gps\TileMath.java"),
     (Join-Path $root "app\src\main\java\com\gpsquest96\route\RouteFormatException.java"),
     (Join-Path $root "app\src\main\java\com\gpsquest96\route\RouteNode.java"),
     (Join-Path $root "app\src\main\java\com\gpsquest96\route\Route.java"),
@@ -56,7 +57,8 @@ $sources = @($stubs) + @(
     (Join-Path $PSScriptRoot "java\test\hosttest\RouteBundleHostTest.java"),
     (Join-Path $PSScriptRoot "java\test\hosttest\RasterGridHostTest.java"),
     (Join-Path $PSScriptRoot "java\test\hosttest\SpriteExtractorHostTest.java"),
-    (Join-Path $PSScriptRoot "java\test\hosttest\AvatarSpritesHostTest.java")
+    (Join-Path $PSScriptRoot "java\test\hosttest\AvatarSpritesHostTest.java"),
+    (Join-Path $PSScriptRoot "java\test\hosttest\TileMathHostTest.java")
 )
 
 & $javac -encoding UTF-8 -cp $jsonJar -d $out $sources
@@ -104,6 +106,11 @@ if ($code -eq 0) {
 
 if ($code -eq 0) {
     & $java -cp "$out;$jsonJar" hosttest.AvatarSpritesHostTest
+    $code = $LASTEXITCODE
+}
+
+if ($code -eq 0) {
+    & $java -cp "$out;$jsonJar" hosttest.TileMathHostTest
     $code = $LASTEXITCODE
 }
 

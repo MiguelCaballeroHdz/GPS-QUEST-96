@@ -87,3 +87,65 @@ Arte en la app: datos de píxeles en código (`avatar/AvatarSprites.java`, Java 
 | El lado chica es un recolor, no un dibujo propio | Documentado en §3; Miguel autorizó el retoque; el sombreado se conserva y el rosa domina al castaño en la zona del pelo (verificado por host test). |
 | El cuadro 32x56 es mayor que el 16x16 ROM | El quad conserva la proporción (1 celda de ancho, 1,75 de alto), con precedente en el viejo `PlayerRenderer` 16x24; la textura se crea y se sube con FRAME_W x FRAME_H. |
 | `MainActivity` no compila en la VM | No se puede verificar aquí (faltan stubs de Android); revisión estática del diff + build en la PC de Miguel (criterio 4). |
+
+## 10. Slice 2 — capa de tiles OSM (implementación)
+
+### 10.1 La referencia vieja: qué se reutiliza y qué se evita
+
+En oct 2026 la app ya tuvo mapa open source (ver `memory/archivo/bitacora-historico.md`): osmdroid + `TileQueueManager.java` propio, borrado entero el 9 oct 2026 ("adiós OSM") a favor del raster procedural. El fallo que Miguel recuerda ("dos mapas cruzados uno sobre el otro") fue real: la capa de tiles y el raster/checker dibujaban **a la vez** (tiles como base bajo un checker translúcido alfa 0.45 + rejilla de celdas), con proyecciones y anclas distintas. Nada de eso queda en el código actual (grep verificado: ni `TileQueueManager`, ni osmdroid, ni `GBTileRenderer`).
+
+**Se reutilizan (parámetros que sí funcionaban, reimplementados desde cero; el archivo viejo no existe):**
+- Pool fijo de 2 hilos de descarga (`OsmTileManager`).
+- RAM `LruCache` ~6 MB, tamaño por `Bitmap.getByteCount()`.
+- Disco `filesDir/maps/z_x_y.png` con TTL de 7 días (precedente de `OsmDataFetcher`).
+- Dedupe en vuelo (`ConcurrentHashMap` con `putIfAbsent`).
+- Endpoint `https://tile.openstreetmap.org/{z}/{x}/{y}.png` + User-Agent propio con contacto (`GPSQuest96/0.1.0 (https://github.com/MiguelCaballeroHdz)`).
+- Rejilla 3x3 alrededor del punto, zoom base 16.
+- Throttle de petición de área: 2 s por mismo centro y zoom.
+- Solo `HttpURLConnection` + hilos worker + `org.json` donde aplique. Cero dependencias nuevas (STACK.md: Miguel compila con `--offline`; no osmdroid/okhttp/gson/Glide).
+
+**Se evita (lo que rompió el mapa viejo):**
+- Dibujar tiles y raster a la vez: la regla es estructural (§10.3), no de disciplina.
+- Checker translúcido o rejilla de celdas sobre las tiles.
+- osmdroid y su atribución de librería: la atribución va en la UI propia (`tv_osm_attr`, §10.4).
+- Subir solo la tesela central en el hilo GL: aquí el marco se publica entero o no se dibuja (§10.3).
+
+### 10.2 Zoom UI → nivel z
+
+El zoom del mapa lo gobierna `GBMapRenderer` (`setZoom` 0.5–4.0, botones ±0.5, preferencia `map_zoom`). El nivel de tesela se deriva de ese zoom, no al revés:
+
+| Zoom UI | Nivel z | Ancho de tesela (Xalapa, lat 19.5°) |
+|---|---|---|
+| 0.5x | 15 | ~1153 m |
+| 1.0x | 16 | ~576 m |
+| 1.5x | 17 | ~288 m |
+| 2.0x | 17 | ~288 m |
+| 3.0x | 18 | ~144 m |
+| 4.0x | 18 | ~144 m |
+
+Fórmula (`TileMath.zoomForUiZoom`): `z = 16 + round(log2(uiZoom))`, recortado a 15–18; zoom inválido (0, negativo, NaN) → 16. Al cambiar el zoom UI, `MainActivity.applyMapZoom` repide las 9 teselas del nuevo nivel para el último centro conocido (sin pedir si nunca hubo centro). La rejilla 3x3 a z16 cubre ~1729 m de ancho; el viewport del raster es 504x1112 m, así que el marco cubre la vista con margen.
+
+### 10.3 Garantía de una sola capa base (estructural)
+
+1. `OsmTileLayer` solo publica un marco **completo**: 9 teselas del mismo (z, cx, cy) subidas a textura. Un marco parcial nunca se dibuja; un cambio de centro o de zoom descarta el marco en curso y borra sus texturas; una tesela duplicada se ignora; una tesela de un marco viejo se borra en el acto.
+2. `OsmTileLayer.draw()` devuelve `true` solo si el marco publicado **cubre todo el viewport** (`TileMath.covers`, borde tocado cuenta como cubierto); en cualquier otro caso (sin marco, marco incompleto, viewport fuera del marco) devuelve `false`.
+3. `GameRenderer.onDrawFrame` dibuja **una sola**: `tilesDrawn = tileLayer.draw(...)`; `if (!tilesDrawn) gbMap.draw(...)`. No existe camino de código que dibuje ambas en el mismo frame.
+4. La proyección es la misma que la del raster (metros → píxeles con la celda de 8 m de `GBMapRenderer`, misma ancla en el centro del mapa), así que al caer al respaldo la geografía no salta. El avatar (Slice 1) y los POIs/nodos de ruta se dibujan **encima** de la capa base, sea cual sea.
+5. Sin red y sin caché: el manager no entrega nada, el marco nunca se publica, `draw()` devuelve `false` y el mapa es raster pixel art (D3). Sin red **con** caché: las 9 teselas salen de disco (TTL 7 días) y el mapa es real.
+
+### 10.4 Política de uso de tiles OSM
+
+- User-Agent propio con contacto en cada petición; `Referer` al repo.
+- Sin descarga masiva: rejilla 3x3 por área, throttle 2 s por mismo centro y zoom, sin reintento interno (el próximo `requestArea` reintenta), timeouts 15 s, descarga solo por movimiento/zoom del usuario.
+- Caché en disco con TTL 7 días: el mapa funciona sin conexión con lo ya descargado.
+- Atribución "© OpenStreetMap contributors" visible en la UI del mapa (`tv_osm_attr`, abajo centrado, fondo semitransparente) **solo cuando las tiles están activas**; se oculta al caer al respaldo raster. El `GameRenderer` (static) no toca la UI: avisa por `AttributionListener` y la Activity cambia la visibilidad en el hilo UI, solo cuando cambia el estado.
+- Sondeo de validación del endpoint (2026-11-10, una sola petición): `GET https://tile.openstreetmap.org/16/15123/29142.png` (Xalapa centro, z16) con el User-Agent de la app → **HTTP 200, 23 477 bytes, PNG 256x256, 0,8 s**.
+
+## 11. Criterios de aceptación (Slice 2)
+
+1. `TileMathHostTest`: 93 comprobaciones, 0 fallos; suite host completa 550 comprobaciones, 0 fallos (39 Pueblo + 11 Geofence + 55 OSM Classify + 47 Route + 36 RouteValidator + 26 RouteBundle + 43 RasterGrid + 33 SpriteExtractor + 167 AvatarSprites + 93 TileMath).
+2. Una sola capa base activa en todo momento (§10.3): no existe camino de código que dibuje tiles + raster en el mismo frame.
+3. Cero dependencias Gradle nuevas (sin cambios en `build.gradle`).
+4. `.\gradlew.bat clean assembleDebug --offline` → `EXIT=0` en la PC de Miguel (pendiente: `assembleDebug` no corre en la VM).
+5. En el POCO con red: mapa real con calles y nombres, avatar encima, atribución visible abajo. Sin red con caché: mismo mapa real. Sin red sin caché: raster pixel art y atribución oculta (pendiente: verificación de Miguel).
+6. La pantalla del emulador no cambia (sin toques al camino PPU).
