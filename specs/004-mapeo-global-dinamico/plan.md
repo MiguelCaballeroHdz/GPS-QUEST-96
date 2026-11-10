@@ -118,13 +118,49 @@ Referencias de decisiones: §2 (D1-D3) y §12 (D-01…D-05) de la spec.
 ### Slice 3 — Doble validación en modo lectura
 
 - **Objetivo:** medir las tres señales sin mover nada.
-- **Archivos:** lectura de estado del emulador (JNI), `GameEngine`.
+- **Archivos:** `route/RouteValidator.java` (nuevo, Java puro), `GameEngine`
+  (cableado), `ControlModeManager` + `LocationService` (precisión del fix
+  y contador de fixes), host test `RouteValidatorHostTest`.
 - **Tareas:**
   - Snapshot de posición ROM en VBlank; comparación por fix GPS.
   - Loguear las tres señales (llegada / consumo / destino) y marcar lecturas dudosas.
   - Cero escrituras: no avanza `posicion`.
 - **Criterios:** §7.9, §7.10 y §7.11 en una sesión de calle.
 - **Depende de:** 016 (identidad de mapa por perfil) para no leer offsets fijos de Gen 2.
+- **Estado: HECHO 2026-11-10 (host; dispositivo pendiente).**
+  `RouteValidator.evaluate(prev, cur, fix, node)` mide R3: llegada
+  (haversine fix→nodo ≤ radio, 15 m §5.2), consumo (la posición ROM
+  cambió entre snapshots) y destino (mapa + casilla del nodo). El snapshot
+  es `nativeGetCurrentMap` (009 slice 2, `{grupo, mapa, y, x}`): no se
+  añadieron offsets nuevos ni JNI nuevo. El snapshot se toma en el frame
+  en que se procesa cada fix (no cada frame: el log nativo de 009-B2
+  saturaría el log a 60 fps) y la comparación es por fix GPS
+  (LocationService, 5 s / 5 m), con el fix REAL
+  (`getRealLocation()`, nunca el simulado de Modo Sofá). La precisión del
+  fix se plomó desde `LocationService` para marcar "fix impreciso".
+  Lecturas dudosas marcadas: fix impreciso, precisión desconocida, sin
+  fix, sin snapshot ROM, avatar sin cambio de posición ROM (bloqueado o
+  parado), mapa incompatible y nodo sin destino declarado.
+  **Sin destino no se inventa terreno:** hoy todos los nodos generados
+  tienen `destMapId == NO_DEST`, así que la señal 3 queda
+  `NOT_APPLICABLE` hasta que un slice posterior (o el volcado POCO, 005)
+  declare destinos reales. La codificación `map_id = grupo * 256 + mapa`
+  es provisional y debe confirmarse con el volcado POCO antes de que el
+  slice 4 la use para avanzar `posicion`.
+  Host `RouteValidatorHostTest`: **36 comprobaciones, `EXIT=0`** (llegada,
+  consumo, destino, dudosas, cero escrituras: la ruta no cambia al
+  evaluar). Suite Java completa: 257 comprobaciones, 0 fallos. Build
+  `assembleDebug` NO verificado en esta VM (timeout de Maven
+  documentado); queda para la PC de Miguel.
+  `BUILD_TAG` sin tocar (el rebuild con hash/fecha se hace en su PC).
+- **Discrepancia de numeración (anotada, no inventada):** el plan cita
+  §7.9, §7.10 y §7.11, pero la spec aprobada §7 solo numera 8 criterios
+  (1–4 host, 5–8 dispositivo). No existen §7.9–11 en la spec. Los checks
+  de host que sí se verifican en este slice son: (a) las tres señales se
+  loguean por fix, (b) cero escrituras a estado del juego y a `posicion`,
+  (c) lecturas dudosas marcadas. Los criterios de dispositivo quedan
+  "pendiente de sesión de calle en POCO" y NO bloquean el cierre
+  (precedente 015 B5).
 
 ### Slice 4 — Avance monotónico, `resueltos[]` y re-enganche
 
@@ -181,10 +217,12 @@ Referencias de decisiones: §2 (D1-D3) y §12 (D-01…D-05) de la spec.
 | 0 | 3.2, 6 | 4, 8 | HECHO 2026-11-07 (validación con motivo, 44 checks) |
 | 1 | 3.5, 4/R2 | 3, 8 + POCO | HECHO 2026-11-07 (host 81 + POCO 278 elem) |
 | 2 | 3.1, 4/R1, 5.2 | 1, 2, 4 (host) · 8 (dispositivo) | HECHO host 2026-11-07; criterio de dispositivo pendiente |
-| 3 | 4/R3, 5.3 | 9, 10, 11 | pendiente |
-| 4 | 3.3, 4/R5-R8 | 5, 6 | pendiente |
+| 3 | 4/R3, 5.3 | 9, 10, 11 (*) | HECHO host 2026-11-10 (36 checks); dispositivo pendiente de calle |
+| 4 | 3.3, 4/R5-R8 | 5, 6 | pendiente (desbloqueado: dependía del 3) |
 | 5 | 3.4, 4/R7, R9 | 12 | pendiente |
 | 6 | 4/R10, 6 | 7 | 6a export/import HECHO 2026-11-07 (host 26); 6b válvula pendiente del slice 4 |
+
+(*) Discrepancia: la spec aprobada §7 solo numera 8 criterios; no existen §7.9–11. Los checks de host del slice 3 son: tres señales logueadas por fix, cero escrituras, lecturas dudosas marcadas. Dispositivo pendiente de calle.
 
 ## Riesgos de secuencia
 

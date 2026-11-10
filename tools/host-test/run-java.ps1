@@ -40,12 +40,14 @@ $sources = @($stubs) + @(
     (Join-Path $root "app\src\main\java\com\gpsquest96\route\RouteNode.java"),
     (Join-Path $root "app\src\main\java\com\gpsquest96\route\Route.java"),
     (Join-Path $root "app\src\main\java\com\gpsquest96\route\RouteGenerator.java"),
+    (Join-Path $root "app\src\main\java\com\gpsquest96\route\RouteValidator.java"),
     (Join-Path $root "app\src\main\java\com\gpsquest96\route\RouteBundle.java"),
     (Join-Path $root "app\src\main\java\com\gpsquest96\render\OsmRasterGrid.java"),
     (Join-Path $PSScriptRoot "java\test\hosttest\PuebloHostTest.java"),
     (Join-Path $PSScriptRoot "java\test\hosttest\GeofenceHostTest.java"),
     (Join-Path $PSScriptRoot "java\test\com\gpsquest96\gps\OsmClassifyHostTest.java"),
     (Join-Path $PSScriptRoot "java\test\hosttest\RouteHostTest.java"),
+    (Join-Path $PSScriptRoot "java\test\hosttest\RouteValidatorHostTest.java"),
     (Join-Path $PSScriptRoot "java\test\hosttest\RouteBundleHostTest.java"),
     (Join-Path $PSScriptRoot "java\test\hosttest\RasterGridHostTest.java")
 )
@@ -70,6 +72,11 @@ if ($code -eq 0) {
 
 if ($code -eq 0) {
     & $java -cp "$out;$jsonJar" hosttest.RouteHostTest
+    $code = $LASTEXITCODE
+}
+
+if ($code -eq 0) {
+    & $java -cp "$out;$jsonJar" hosttest.RouteValidatorHostTest
     $code = $LASTEXITCODE
 }
 

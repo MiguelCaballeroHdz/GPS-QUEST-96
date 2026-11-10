@@ -9,6 +9,9 @@ import com.gpsquest96.bluetooth.AccessoryGattService;
 import com.gpsquest96.gps.GeofenceManager;
 import com.gpsquest96.gps.WeatherData;
 import com.gpsquest96.gps.WeatherService;
+import com.gpsquest96.route.Route;
+import com.gpsquest96.route.RouteNode;
+import com.gpsquest96.route.RouteValidator;
 import com.gpsquest96.emulator.core.EmulationPipeline;
 
 /**
@@ -66,6 +69,16 @@ public class GameEngine {
     // el hilo de emulacion y lo lee la UI.
     private volatile EmulatorState currentState = EmulatorState.BOOT;
     private int[] eventFlags = new int[256]; // Variables de progreso (RULES.md Ã‚Â§4)
+
+    // Spec 004, slice 3: doble validación en modo lectura (R3). Solo lee:
+    // mide las tres señales y loguea; nunca escribe en el juego ni avanza
+    // `posicion` (no existe aún: eso es el slice 4). La ruta y el índice
+    // del nodo a validar los pone MainActivity; por defecto, nodo 0.
+    private volatile Route validationRoute;
+    private volatile int validationNodeIndex = 0;
+    private RouteValidator.RomSnapshot lastRomSnapshot;
+    private int lastEvaluatedFixCount = -1;
+    private RouteValidator.Validation lastValidation;
 
     // RULES.md Ã‚Â§6: throttle de clima (la bomba de frames corre a 4fps;
     // Open-Meteo no debe consultarse mÃƒÂ¡s de 1 vez por minuto).
@@ -300,6 +313,9 @@ public class GameEngine {
         // Spec 016, slice 3: sondear el estado del emulador una vez por frame.
         checkEmulatorState();
 
+        // Spec 004, slice 3: doble validación en modo lectura (R3).
+        maybeValidateRoute();
+
         // Actualizar clima periÃƒÂ³dicamente
         updateWeather();
 
@@ -332,6 +348,68 @@ public class GameEngine {
                 }
             });
         }
+    }
+
+    /**
+     * Spec 004, slice 3: doble validación en modo lectura (R3).
+     * <p>
+     * En cada fix GPS nuevo (LocationService, 5 s / 5 m) toma un snapshot
+     * de la posición ROM en el frame en curso (tras stepFrame, es decir,
+     * en VBlank) y evalúa las tres señales sobre el nodo en validación:
+     * llegada, consumo y destino. Solo lee y loguea: no escribe en el
+     * juego, no toca eventFlags ni SaveManager y no avanza `posicion`.
+     * <p>
+     * El snapshot NO se toma cada frame: `getCurrentMap()` loguea en
+     * nativo en cada llamada (009-B2) y a 60 fps saturaría el log. La
+     * comparación es por fix, así que el snapshot se toma en el frame en
+     * que se procesa cada fix; la posición ROM entre fixes no se necesita.
+     * El fix es el REAL (`getRealLocation()`), nunca el simulado de Modo
+     * Sofá (`getCurrentCoordinates()`).
+     */
+    private void maybeValidateRoute() {
+        if (validationRoute == null || validationRoute.nodes.isEmpty()) return;
+        if (validationNodeIndex < 0
+                || validationNodeIndex >= validationRoute.nodes.size()) return;
+        if (controlModeManager == null || emulatorBridge == null) return;
+        int fixCount = controlModeManager.getRealFixCount();
+        if (fixCount == lastEvaluatedFixCount) return; // sin fix nuevo
+        lastEvaluatedFixCount = fixCount;
+
+        double[] real = controlModeManager.getRealLocation();
+        RouteValidator.RomSnapshot cur =
+                RouteValidator.RomSnapshot.fromCurrentMap(emulatorBridge.getCurrentMap());
+        RouteNode node = validationRoute.nodes.get(validationNodeIndex);
+        RouteValidator.Validation v = RouteValidator.evaluate(
+                lastRomSnapshot, cur,
+                new RouteValidator.GpsFix(real[0], real[1],
+                        controlModeManager.getRealAccuracyM()),
+                node);
+        lastRomSnapshot = cur;
+        lastValidation = v;
+        Log.i(TAG, v.formatLog(validationNodeIndex));
+    }
+
+    /**
+     * Spec 004, slice 3: ruta a validar (modo lectura). La pone
+     * MainActivity al cargar/regenerar la ruta; null desactiva la
+     * validación. No se guarda nada: la ruta ya vive en su archivo.
+     */
+    public void setValidationRoute(Route route) {
+        validationRoute = route;
+        validationNodeIndex = 0;
+        lastRomSnapshot = null;
+        lastEvaluatedFixCount = -1;
+        lastValidation = null;
+    }
+
+    /** Spec 004, slice 3: índice del nodo a validar (por defecto, 0). */
+    public void setValidationNodeIndex(int index) {
+        validationNodeIndex = index;
+    }
+
+    /** Spec 004, slice 3: última validación R3, o null si aún no hay. */
+    public RouteValidator.Validation getLastRouteValidation() {
+        return lastValidation;
     }
 
     /** Estado actual del emulador (spec 016, slice 3). */

@@ -30,6 +30,13 @@ public class ControlModeManager {
     private double realLatitude = simLatitude;
     private double realLongitude = simLongitude;
 
+    // Spec 004, slice 3: precisión del último fix real (NaN si se
+    // desconoce) y contador de fixes reales recibidos. GameEngine lo usa
+    // para detectar un fix nuevo sin comparar coordenadas (las iniciales
+    // son el fallback de Xalapa, indistinguibles de un fix real).
+    private float realAccuracyM = Float.NaN;
+    private int realFixCount = 0;
+
     // Callback para notificar cambios de modo
     private ModeChangeListener listener;
 
@@ -103,6 +110,19 @@ public class ControlModeManager {
     public void setRealLocation(double lat, double lon) {
         this.realLatitude = lat;
         this.realLongitude = lon;
+        realFixCount++;
+    }
+
+    /**
+     * Establece las coordenadas reales del GPS con su precisión estimada
+     * en metros (spec 004, slice 3: marca lecturas con fix impreciso).
+     * Una precisión &lt;= 0 significa "sin precisión" y se guarda como NaN.
+     */
+    public void setRealLocation(double lat, double lon, float accuracyM) {
+        this.realLatitude = lat;
+        this.realLongitude = lon;
+        this.realAccuracyM = (accuracyM > 0) ? accuracyM : Float.NaN;
+        realFixCount++;
     }
 
     /**
@@ -110,6 +130,16 @@ public class ControlModeManager {
      */
     public double[] getRealLocation() {
         return new double[]{realLatitude, realLongitude};
+    }
+
+    /** Precisión estimada del último fix real, en metros (NaN si se desconoce). */
+    public float getRealAccuracyM() {
+        return realAccuracyM;
+    }
+
+    /** Número de fixes reales recibidos desde el arranque. */
+    public int getRealFixCount() {
+        return realFixCount;
     }
 
     /**

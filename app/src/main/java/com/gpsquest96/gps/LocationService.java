@@ -156,7 +156,10 @@ public class LocationService extends Service implements LocationListener {
         walkingActive = walking;
         if (controlModeManager != null) {
             controlModeManager.setGpsEnabled(walking);
-            controlModeManager.setRealLocation(location.getLatitude(), location.getLongitude());
+            // Spec 004, slice 3: el fix lleva su precisión para marcar
+            // lecturas dudosas por fix impreciso.
+            controlModeManager.setRealLocation(location.getLatitude(),
+                    location.getLongitude(), location.getAccuracy());
         }
     }
 
