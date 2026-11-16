@@ -10,7 +10,9 @@ import com.gpsquest96.gps.GeofenceManager;
 import com.gpsquest96.gps.WeatherData;
 import com.gpsquest96.gps.WeatherService;
 import com.gpsquest96.route.Route;
+import com.gpsquest96.route.RouteAutoAction;
 import com.gpsquest96.route.RouteFormatException;
+import com.gpsquest96.route.RouteNode;
 import com.gpsquest96.route.RouteProgress;
 import com.gpsquest96.route.RouteValidator;
 import com.gpsquest96.emulator.core.EmulationPipeline;
@@ -115,6 +117,20 @@ public class GameEngine {
          * se vuelve inmutable, R1) y actualizar la línea de ruta.
          */
         default void onRouteNodeResolved(int nodeIndex) {
+        }
+
+        /**
+         * Spec 004, slice 5: el nodo evaluado está dentro de su radio y su
+         * acción pide interacción (R9). ENTER/TALK → auto-A sin cambiar de
+         * modo; USE/BATTLE/WAIT → Modo Sofá. El rumbo es del fix real al
+         * nodo (cardinal del intento). Método default; MainActivity lo
+         * implementa con la secuencia anti-atasco (R7) y el cambio a Sofá.
+         * Se avisa en cada fix con llegada; el receptor desduplica por
+         * nodo. Se avisa también cuando el nodo acaba de resolverse: la
+         * resolución de ruta no abre la puerta en el juego, el A sí.
+         */
+        default void onRouteNodeAction(int nodeIndex, RouteNode.Action action,
+                float bearingDeg) {
         }
     }
 
@@ -402,6 +418,33 @@ public class GameEngine {
         if (outcome.validation != null) {
             Log.i(TAG, outcome.validation.formatLog(outcome.evaluatedNodeIndex));
         }
+
+        // Spec 004, slice 5: acción automática de ruta (R9). Si el nodo
+        // evaluado está dentro de su radio, enter/talk se disparan solos
+        // (auto-A) y use/battle/wait pasan a Modo Sofá. Se avisa en cada
+        // fix con llegada; MainActivity desduplica (una secuencia / un
+        // aviso por nodo y ruta). También se avisa cuando el nodo acaba
+        // de resolverse: la resolución no abre la puerta en el juego.
+        if (outcome.validation != null && outcome.validation.arrival
+                && !routeProgress.isFinished() && outcome.evaluatedNodeIndex >= 0) {
+            RouteNode node = routeProgress.route.nodes.get(outcome.evaluatedNodeIndex);
+            if (RouteAutoAction.kindFor(node.action) != RouteAutoAction.Kind.NONE
+                    && listener != null) {
+                final int nodeIndex = node.index;
+                final RouteNode.Action action = node.action;
+                final float bearing = (float) RouteAutoAction.bearingDeg(
+                        real[0], real[1], node.lat, node.lon);
+                mainHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (listener != null) {
+                            listener.onRouteNodeAction(nodeIndex, action, bearing);
+                        }
+                    }
+                });
+            }
+        }
+
         if (!outcome.changed) return;
         Log.i(TAG, outcome.formatLog());
         if (routeProgressFile != null) {

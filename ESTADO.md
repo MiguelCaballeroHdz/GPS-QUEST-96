@@ -17,7 +17,8 @@ Resumen de `memory/archivo/estado_actual-2026-11.md` + `tasks-2026-11.md`. Solo 
 - Deudas abiertas: APU (audio), timing fino CPU/PPU, RTC MBC3.
 
 **Mapeo y avance**
-- 004 POI-first: slices 0, 1, 2, 3, 4 y 6a hechos; slice 5 desbloqueado (dependía del 4); 6b desbloqueado (el estado ya existe).
+- 004 POI-first: slices 0, 1, 2, 3, 4, 5 y 6a hechos; 6b desbloqueado (el estado ya existe).
+- 004 slice 5 (2026-11-16): `enter`/`talk` automáticos (R7, R9) — `RouteAutoAction` (enrutado por acción, rumbo fix→nodo, secuencia anti-atasco 3 × 300 ms solo en MAP) + aviso `onRouteNodeAction` en `GameEngine` + auto-A con háptico 60 ms y paso a Modo Sofá para `use`/`battle`/`wait` en `MainActivity`; host 58 comprobaciones nuevas (`RouteAutoActionHostTest`), total 610, 0 fallos. `map_id` sigue provisional y la puerta de destino inactiva (todos NO_DEST). Dispositivo pendiente de sesión de calle en POCO (criterio §7.7; el plan citaba §7.12, que no existe).
 - 004 slice 4 (2026-11-10): `RouteProgress` (posicion/resueltos[], re-enganche solo atrás 120 m, anti-skip) con persistencia en `progress_<rom_key>.json`; host 47 comprobaciones nuevas, total 604, 0 fallos. `map_id = grupo * 256 + mapa` sigue provisional (una sola función, `RouteValidator.mapIdOf`) pendiente del volcado POCO (005). Dispositivo pendiente de sesión de calle en POCO (criterios §7.5 y §7.6).
 - 004 slice 3 (2026-11-10): `RouteValidator` mide R3 en modo lectura (llegada/consumo/destino por fix GPS, cero escrituras); host 36 comprobaciones, 0 fallos. Sin destino declarado la señal 3 es N-A (hoy ningún nodo tiene destino). Dispositivo pendiente de sesión de calle en POCO.
 - 004 radio (2026-11-08): recorte de geometría a la unión de círculos, poda del acumulador a 1 km, corredor 150/120 en cada actualización y seed sin fix usando el ancla. POCO: 180 nodos (2 POI, máx. 249,4 m), raster de 159 nodos (antes 1290).

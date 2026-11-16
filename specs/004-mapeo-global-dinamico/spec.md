@@ -175,6 +175,40 @@ secuencia.
   existe §12. Las D-01…D-05 que aparecen en el archivo pertenecen a la
   spec 015 (auditoría), no a la 004.
 
+## 10b. Notas de implementación — slice 5 (2026-11-16, host)
+
+- **Enrutado (R9):** `RouteAutoAction.kindFor` decide por acción del
+  nodo: ENTER/TALK → auto-A (sin cambiar de modo); USE/BATTLE/WAIT →
+  Modo Sofá (se hace a mano); WALK → nada.
+- **Aviso:** `GameEngine.maybeAdvanceRoute` publica
+  `onRouteNodeAction(nodo, acción, rumbo)` en el hilo principal cuando
+  `validation.arrival` es true y la ruta no está terminada. El rumbo es
+  del fix real al nodo (cardinal del vector de ruta). El aviso también
+  se dispara cuando el nodo acaba de resolverse: la resolución no abre
+  la puerta en el juego, el A sí.
+- **Anti-atasco (R7):** `RouteAutoAction.Sequence`, una por nodo y sin
+  re-arme automático (rearmar sin límite convertiría el anti-atasco
+  acotado en un pulsador infinito). 3 intentos de 300 ms, solo en
+  estado MAP; aborta en cuanto la pantalla cambia o el nodo se resuelve.
+  `MainActivity` desduplica con un `Set<Integer>` por ruta (reset al
+  cambiar `romKey`): una secuencia y un aviso por nodo. Háptico de
+  60 ms una vez por nodo (VIBRATE ya estaba en el manifiesto).
+- **Sofá:** USE/BATTLE/WAIT pasan a Modo Sofá una sola vez por nodo
+  (`setMode(SOFA)` + `handleModeSwitch(SOFA)` + `showBlockMessage`),
+  igual que el forzado por agua. `onPause` suelta A y cruceta y cancela
+  la secuencia y sus callbacks.
+- **Host:** `RouteAutoActionHostTest` 58 comprobaciones (enrutado,
+  rumbo, cuadrantes y límites, bits del joypad, 3 intentos con
+  espaciado de 300 ms, aborto fuera de MAP, tiempo al próximo
+  intento); total **610, 0 fallos**. `tools/host-test/run-java.sh`
+  nuevo (espejo Linux de `run-java.ps1`); el JDK 17 de la VM vino de
+  un tarball Temurin (el `apt-get install openjdk-17` se atascó en
+  `apt-get update` más de 10 min con la red sana).
+- **Dispositivo pendiente:** §7.7 (`enter` dentro del radio cambia de
+  mapa sin intervención del usuario) requiere sesión de calle en POCO;
+  no se cierra con este paquete. La puerta de destino sigue inactiva
+  (todos los nodos NO_DEST) y `map_id` sigue provisional.
+
 ## 9. Dependencias
 
 - **016** — estado del emulador e identidad de mapa por perfil.

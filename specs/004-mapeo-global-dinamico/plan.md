@@ -216,6 +216,28 @@ spec 015, no a la 004.
   - Anti-atasco acotado (3 × 300 ms) solo en estado `MAP`, abortando ante cambio de pantalla.
 - **Criterios:** §7.12.
 - **Depende de:** 016 (estado del emulador: MAP vs diálogo/menú/batalla).
+- **Estado: HECHO host 2026-11-16.** `route/RouteAutoAction.java` (nuevo, puro):
+  `kindFor` (ENTER/TALK → auto-A; USE/BATTLE/WAIT → Modo Sofá; WALK →
+  nada), `bearingDeg` (rumbo inicial fix → nodo), `dirBitsForBearing`
+  (mismos cuadrantes que `applyJoypadFromBearing`) y `Sequence`
+  (anti-atasco R7: 3 intentos de 300 ms, solo en MAP, aborta ante cambio
+  de pantalla; sin re-arme: una secuencia por nodo). `GameEngine` avisa
+  `onRouteNodeAction(nodo, acción, rumbo)` en el hilo principal cuando
+  el nodo evaluado llega dentro del radio y la ruta no está terminada
+  (también cuando el nodo acaba de resolverse: resolver no abre la
+  puerta). `MainActivity` desduplica (un aviso por nodo y ruta, con
+  reset por `romKey`): auto-A aprieta cardinal + A con `hudHandler`,
+  háptico de 60 ms una vez por nodo, y para en cuanto el nodo se
+  resuelve; USE/BATTLE/WAIT pasan a Modo Sofá una vez con
+  `showBlockMessage`; `onPause` suelta los botones y cancela la
+  secuencia. Host `RouteAutoActionHostTest` **58 comprobaciones**,
+  total **610, 0 fallos** (`run-java.sh` nuevo en Linux, espejo de
+  `run-java.ps1`). **Dispositivo pendiente: §7.7** (`enter` dentro del
+  radio cambia de mapa sin intervención del usuario) no se cierra con
+  este paquete: requiere sesión de calle en POCO. La puerta de destino
+  sigue inactiva (todos los nodos NO_DEST) y `map_id` sigue provisional.
+  (Discrepancia anotada: el plan citaba §7.12, que no existe en la spec:
+  §7 solo numera 8 criterios; el criterio de dispositivo real es §7.7.)
 
 ### Slice 6 — Export/import y válvula de escape
 
@@ -252,10 +274,10 @@ spec 015, no a la 004.
 | 2 | 3.1, 4/R1, 5.2 | 1, 2, 4 (host) · 8 (dispositivo) | HECHO host 2026-11-07; criterio de dispositivo pendiente |
 | 3 | 4/R3, 5.3 | 9, 10, 11 (*) | HECHO host 2026-11-10 (36 checks); dispositivo pendiente de calle |
 | 4 | 3.3, 4/R5-R8 | 5, 6 | HECHO host 2026-11-10 (47 checks); dispositivo pendiente |
-| 5 | 3.4, 4/R7, R9 | 12 | pendiente (desbloqueado: dependía del 4) |
+| 5 | 3.4, 4/R7, R9 | 12 (*) | HECHO host 2026-11-16 (58 checks, total 610); dispositivo pendiente (§7.7) |
 | 6 | 4/R10, 6 | 7 | 6a export/import HECHO 2026-11-07 (host 26); 6b válvula desbloqueada (el estado ya existe) |
 
-(*) Discrepancia: la spec aprobada §7 solo numera 8 criterios; no existen §7.9–11. Los checks de host del slice 3 son: tres señales logueadas por fix, cero escrituras, lecturas dudosas marcadas. Dispositivo pendiente de calle.
+(*) Discrepancia: la spec aprobada §7 solo numera 8 criterios; no existen §7.9–11. Los checks de host del slice 3 son: tres señales logueadas por fix, cero escrituras, lecturas dudosas marcadas. Dispositivo pendiente de calle. Lo mismo aplica al §7.12 citado para el slice 5: no existe; el criterio de dispositivo real es §7.7.
 
 ## Riesgos de secuencia
 

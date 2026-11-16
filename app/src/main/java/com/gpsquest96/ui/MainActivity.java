@@ -55,6 +55,7 @@ import com.gpsquest96.gps.OsmDataFetcher;
 import com.gpsquest96.gps.WeatherData;
 import com.gpsquest96.gps.WeatherService;
 import com.gpsquest96.route.Route;
+import com.gpsquest96.route.RouteAutoAction;
 import com.gpsquest96.route.RouteBundle;
 import com.gpsquest96.route.RouteGenerator;
 import com.gpsquest96.route.RouteNode;
@@ -2588,6 +2589,18 @@ public class MainActivity extends Activity implements SensorEventListener {
     private int joyDir = 0xF0;
     private int joyAction = 0x0F;
 
+    // Spec 004, slice 5: auto-A (R7, R9). Secuencia anti-atasco en curso
+    // (null si no hay): 3 intentos de 300 ms solo en MAP, aborta ante
+    // cambio de pantalla o al resolverse el nodo. Una secuencia y un aviso
+    // por nodo y ruta (routeActionNodes): rearmar sin límite convertiría
+    // el anti-atasco acotado en un pulsador infinito. El rumbo del
+    // intento es del fix real al nodo (cardinal del vector de ruta).
+    private RouteAutoAction.Sequence routeAutoAction;
+    private float routeAutoActionBearing;
+    private final java.util.Set<Integer> routeActionNodes =
+            new java.util.HashSet<Integer>();
+    private String routeActionRomKey;
+
     private void updateJoypad() {
         android.util.Log.d("GPSQuest96", "updateJoypad joyDir=" + joyDir + " joyAction=" + joyAction);
         // joyDir ocupa el nibble alto (bits 4-7) y joyAction el bajo (0-3).
@@ -2663,6 +2676,91 @@ public class MainActivity extends Activity implements SensorEventListener {
 
     private void releaseJoypad() {
         setDirBits(0xF0);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Spec 004, slice 5: enter/talk automáticos (R7, R9)
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Aviso háptico una vez por nodo (R7). Sin permiso en runtime:
+     * VIBRATE es normal y ya está en el manifiesto.
+     */
+    private void vibrateRouteActionOnce() {
+        try {
+            android.os.Vibrator vib = (android.os.Vibrator)
+                    getSystemService(android.content.Context.VIBRATOR_SERVICE);
+            if (vib == null || !vib.hasVibrator()) return;
+            vib.vibrate(android.os.VibrationEffect.createOneShot(
+                    RouteAutoAction.HAPTIC_MS,
+                    android.os.VibrationEffect.DEFAULT_AMPLITUDE));
+        } catch (Throwable ignored) {
+        }
+    }
+
+    /** Suelta lo que apretó la secuencia y la cancela (pausa / ruta nueva). */
+    private void releaseRouteAutoAction() {
+        if (hudHandler != null) {
+            hudHandler.removeCallbacks(routeAutoActionTick);
+            hudHandler.removeCallbacks(routeAutoActionRelease);
+        }
+        if (routeAutoAction != null) {
+            routeAutoAction.abort();
+            routeAutoAction = null;
+        }
+        setActionBits(joyAction | RouteAutoAction.BTN_A);
+        setDirBits(0xF0);
+    }
+
+    /** Suelta los botones del intento en curso (A + cruceta). */
+    private final Runnable routeAutoActionRelease = new Runnable() {
+        @Override
+        public void run() {
+            setActionBits(joyAction | RouteAutoAction.BTN_A);
+            setDirBits(0xF0);
+        }
+    };
+
+    /** Un tick de la secuencia anti-atasco. */
+    private final Runnable routeAutoActionTick = new Runnable() {
+        @Override
+        public void run() {
+            runRouteAutoActionTick();
+        }
+    };
+
+    private void runRouteAutoActionTick() {
+        RouteAutoAction.Sequence seq = routeAutoAction;
+        if (seq == null || gameEngine == null || hudHandler == null) return;
+        RouteProgress progress = gameEngine.getRouteProgress();
+        if (progress != null && progress.isResolved(seq.nodeIndex)) {
+            // El nodo se resolvió: el auto-A ya cumplió, parar.
+            seq.abort();
+            routeAutoAction = null;
+            return;
+        }
+        boolean inMap = gameEngine.getCurrentEmulatorState()
+                == GameEngine.EmulatorState.MAP;
+        RouteAutoAction.Step step = seq.step(System.currentTimeMillis(), inMap);
+        switch (step) {
+            case PRESS:
+                setDirBits(RouteAutoAction.dirBitsForBearing(routeAutoActionBearing));
+                setActionBits(joyAction & ~RouteAutoAction.BTN_A);
+                hudHandler.postDelayed(routeAutoActionRelease,
+                        RouteAutoAction.ATTEMPT_INTERVAL_MS);
+                hudHandler.postDelayed(routeAutoActionTick,
+                        RouteAutoAction.ATTEMPT_INTERVAL_MS);
+                break;
+            case WAIT:
+                hudHandler.postDelayed(routeAutoActionTick,
+                        seq.millisUntilNextAttempt(System.currentTimeMillis()));
+                break;
+            case ABORTED:
+            case DONE:
+            default:
+                routeAutoAction = null;
+                break;
+        }
     }
 
     private void setupJoystick() {
@@ -3012,6 +3110,45 @@ public class MainActivity extends Activity implements SensorEventListener {
             }
             refreshOsmStatusLine();
         }
+
+        @Override
+        public void onRouteNodeAction(final int nodeIndex,
+                final RouteNode.Action action, final float bearingDeg) {
+            // Spec 004, slice 5 (R9): ya llega en el hilo principal
+            // (GameEngine lo publica ahí). ENTER/TALK → auto-A sin
+            // cambiar de modo; USE/BATTLE/WAIT → Modo Sofá para hacerlo
+            // a mano. Una secuencia / un aviso por nodo y ruta: el
+            // anti-atasco es acotado y no se rearma solo.
+            if (gameEngine == null || gameEngine.getRouteProgress() == null) return;
+            RouteProgress progress = gameEngine.getRouteProgress();
+            String romKey = progress.route.romKey;
+            if (routeActionRomKey == null || !routeActionRomKey.equals(romKey)) {
+                routeActionRomKey = romKey;
+                routeActionNodes.clear();
+            }
+            RouteAutoAction.Kind kind = RouteAutoAction.kindFor(action);
+            if (kind == RouteAutoAction.Kind.AUTO_A) {
+                if (routeActionNodes.contains(nodeIndex)) return;
+                routeActionNodes.add(nodeIndex);
+                routeAutoAction = new RouteAutoAction.Sequence(nodeIndex);
+                routeAutoActionBearing = bearingDeg;
+                vibrateRouteActionOnce();
+                Log.i("GameEngine", "004 auto-A nodo " + nodeIndex + " (" + action + ")");
+                runRouteAutoActionTick();
+            } else if (kind == RouteAutoAction.Kind.GO_SOFA) {
+                if (routeActionNodes.contains(nodeIndex)) return;
+                routeActionNodes.add(nodeIndex);
+                if (gameEngine.getControlModeManager().getCurrentMode()
+                        != ControlModeManager.ControlMode.SOFA) {
+                    gameEngine.getControlModeManager().setMode(
+                            ControlModeManager.ControlMode.SOFA);
+                    handleModeSwitch(ControlModeManager.ControlMode.SOFA);
+                }
+                showBlockMessage("Nodo " + nodeIndex + " (" + action
+                        + "): hazlo a mano en Modo Sofá");
+                Log.i("GameEngine", "004 nodo " + nodeIndex + " (" + action + ") -> Modo Sofá");
+            }
+        }
     };
 
     @Override
@@ -3034,6 +3171,7 @@ public class MainActivity extends Activity implements SensorEventListener {
         if (glSurfaceView != null) glSurfaceView.onPause();
         if (gameEngine != null) gameEngine.pause();
         if (hudHandler != null) hudHandler.removeCallbacks(hudUpdater);
+        releaseRouteAutoAction();
         stopFramePump();
         unregisterStepCounter();
     }
