@@ -63,6 +63,17 @@ Java_com_gpsquest96_emulator_EmulatorBridge_nativeGetWildTable(
         jint kind);
 
 /**
+ * Disparo fiel por paso real (spec 009, slice 3). Llama a la rutina del
+ * propio juego (TryWildEncounter, localizada por firma) y, si prepara un
+ * encuentro, arranca la batalla con su mecanismo. Devuelve int[]
+ * [status, group, map, species, level] o null sin ROM/MMU.
+ */
+JNIEXPORT jintArray JNICALL
+Java_com_gpsquest96_emulator_EmulatorBridge_nativeTryWildEncounter(
+        JNIEnv* env,
+        jobject thiz);
+
+/**
  * Estado actual del emulador (spec 016, slice 3).
  * Devuelve el valor de EmulatorState (BOOT=0, INTRO=1, MAP=2, BATTLE=3,
  * MENU=4, PAUSE=5) o -1 si el PPU aun no existe.

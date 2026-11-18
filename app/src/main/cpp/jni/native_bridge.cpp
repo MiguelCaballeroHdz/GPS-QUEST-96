@@ -4,6 +4,7 @@
 #include "core/mmu.h"
 #include "core/ppu.h"
 #include "core/wild_table.h"
+#include "core/wild_routine.h"
 #include "renderer/renderer.h"
 
 #include <android/log.h>
@@ -18,7 +19,7 @@
 // Huella del Ã¡rbol compilado: se imprime en cada nativeOpenRom para saber
 // en POCO EXACTAMENTE quÃ© cÃ³digo corre (fin de los "APK rancio" ambiguos).
 // Formato: fecha + slices incluidos. Actualizar al tocar el core.
-#define BUILD_TAG "2026-11-09+spec016-slice4+spec004-corredor-diagonal"
+#define BUILD_TAG "2026-11-18+spec009-slice3+spec004-slice5"
 
 // Instancia global del cargador (simplificado para esta fase)
 static gpsquest96::RomLoader g_romLoader;
@@ -43,6 +44,9 @@ static gpsquest96::Mmu* g_mmu = nullptr;
 static gpsquest96::Ppu* g_ppu = nullptr;
 static gpsquest96::Renderer* g_renderer = nullptr;
 static gpsquest96::WildTableReader g_wildTable;
+static gpsquest96::WildRoutineLocator g_wildRoutine;
+static gpsquest96::WildRoutineInfo g_wildRoutineInfo;
+static bool g_wildRoutineLocated = false;
 
 // Todas las definiciones JNI con linkage C: sin esto el compilador C++
 // mangled los sÃ­mbolos y Dalvik/ART no los encuentra (UnsatisfiedLinkError).
@@ -69,7 +73,10 @@ Java_com_gpsquest96_emulator_EmulatorBridge_nativeOpenRom(
     env->ReleaseStringUTFChars(romPath, path);
 
     if (success) {
-        // La ROM cambiÃ³: invalidar la cachÃ© de tablas de encuentro.
+        // La ROM cambiÃ³: invalidar la cachÃ© de tablas de encuentro y
+        // de rutinas localizadas (las firmas se reescanean con la ROM).
+        g_wildRoutine.clear();
+        g_wildRoutineLocated = false;
         g_wildTable.clear();
     }
 
@@ -410,6 +417,170 @@ Java_com_gpsquest96_emulator_EmulatorBridge_nativeGetCurrentMap(
 }
 
 /**
+ * Disparo fiel por paso real (spec 009, slice 3).
+ *
+ * Llama a la rutina del propio juego (`RandomEncounter`, localizada por
+ * firma) en vez de elegir especie/nivel en la app. El juego decide con
+ * sus tablas, su `Random`, su repelente, su cooldown y su colision con
+ * hierba. Si hay encuentro, la propia rutina instala `WildBattleScript`
+ * con `CallScript` (wScriptBank/wScriptPos/wScriptRunning) y la batalla
+ * arranca sola en el motor de scripts; aqui solo se verifica que el
+ * guion quedo instalado (ver verifyBattleScriptStarted()).
+ * Fuente: pret/pokecrystal master, `engine/overworld/events.asm`
+ * (`RandomEncounter`, `WildBattleScript`, `CanEncounterWildMon`) y
+ * `home/map.asm` (`CallScript`).
+ *
+ * Formato del int[] devuelto: [status, group, map, species, level].
+ *   status  1 = encuentro preparado y batalla arrancada
+ *           0 = sin encuentro (cooldown, sin hierba, la tirada del
+ *               juego no salio, repelente, o ya corre otro guion)
+ *          -1 = sin ROM/CPU/MMU
+ *          -2 = el mapa actual no tiene tabla (sin evento, RF-01/RF-05)
+ *          -3 = rutina no localizada o ambigua (no se llama a nada)
+ *          -4 = la llamada controlada agoto su presupuesto
+ *          -5 = no se pudo cambiar al banco de la rutina
+ *          -6 = el juego devolvio carry (encuentro) pero el guion de
+ *               batalla no quedo instalado
+ * species/level son 0 salvo status 1 (y -6, que los trae de
+ * diagnostico). Devuelve null si no hay ROM/MMU.
+ * Solo se llama desde el hilo de emulacion (GameEngine.update): la
+ * llamada controlada avanza la CPU del juego y no es segura en otro hilo.
+ */
+static jintArray makeWildResult(JNIEnv* env, jint status, jint group,
+                                jint map, jint species, jint level) {
+    jint values[5] = {status, group, map, species, level};
+    jintArray result = env->NewIntArray(5);
+    if (result == nullptr) {
+        return nullptr;
+    }
+    env->SetIntArrayRegion(result, 0, 5, values);
+    return result;
+}
+
+// Verifica que RandomEncounter instalo el guion de batalla: el juego
+// guarda PLAYEREVENT_MAPSCRIPT en wScriptRunning y el banco/direccion
+// de WildBattleScript (o del guion del concurso de bichos) en
+// wScriptBank/wScriptPos. Las tres direcciones y los valores esperados
+// los revelan las firmas, no van hardcodeados. Si el guion no quedo
+// instalado, la batalla no arranca aunque el juego devolviera carry.
+static bool verifyBattleScriptStarted(
+        const gpsquest96::WildRoutineInfo& info) {
+    if (g_mmu == nullptr) {
+        return false;
+    }
+    if (g_mmu->read(info.scriptRunningAddr) !=
+        info.playerEventMapscript) {
+        return false;
+    }
+    const uint8_t bank = g_mmu->read(info.scriptBankAddr);
+    const uint16_t pos = g_mmu->readWord(info.scriptPosAddr);
+    const bool wild = bank == info.wildBattleScriptBank &&
+                      pos == info.wildBattleScriptAddr;
+    const bool contest = bank == info.bugContestScriptBank &&
+                         pos == info.bugContestScriptAddr;
+    return wild || contest;
+}
+
+JNIEXPORT jintArray JNICALL
+Java_com_gpsquest96_emulator_EmulatorBridge_nativeTryWildEncounter(
+        JNIEnv* env,
+        jobject /* thiz */) {
+
+    if (g_cpu == nullptr || g_mmu == nullptr || !g_romLoader.isOpen()) {
+        return nullptr;
+    }
+
+    // Mapa actual (mismas lecturas que nativeGetCurrentMap, slice 2).
+    const int group = g_mmu->read(0xDCB5);
+    const int map = g_mmu->read(0xDCB6);
+    if (group < 1 || group > 26 || map < 1 || map > 255) {
+        return makeWildResult(env, -2, group, map, 0, 0);
+    }
+
+    // Puerta de tramo: sin tabla no hay evento (RF-01/RF-05).
+    if (!g_wildTable.load(g_romLoader)) {
+        return makeWildResult(env, -2, group, map, 0, 0);
+    }
+    gpsquest96::WildTable table;
+    if (!g_wildTable.lookup(static_cast<uint8_t>(group),
+                            static_cast<uint8_t>(map), table)) {
+        LOGI("B2 paso real %d/%d: sin tabla, sin evento", group, map);
+        return makeWildResult(env, -2, group, map, 0, 0);
+    }
+
+    // Localizar rutinas (cache por ROM; se invalida al cambiar de ROM).
+    if (!g_wildRoutineLocated) {
+        if (!g_wildRoutine.load(g_romLoader)) {
+            return makeWildResult(env, -3, group, map, 0, 0);
+        }
+        const gpsquest96::WildRoutineStatus st =
+            g_wildRoutine.locate(g_wildRoutineInfo);
+        if (st != gpsquest96::WildRoutineStatus::OK) {
+            LOGI("B2 paso real: rutina no localizada (%d)",
+                 static_cast<int>(st));
+            return makeWildResult(env, -3, group, map, 0, 0);
+        }
+        g_wildRoutineLocated = true;
+        LOGI("B2 rutina RandomEncounter banco %u addr 0x%04X (ROM 0x%X); "
+             "TryWildEncounter 0x%04X; CallScript 0x%04X; "
+             "WildBattleScript banco %u addr 0x%04X",
+             g_wildRoutineInfo.randomEncounter.bank,
+             g_wildRoutineInfo.randomEncounter.cpuAddress,
+             g_wildRoutineInfo.randomEncounter.romOffset,
+             g_wildRoutineInfo.tryWildEncounter.cpuAddress,
+             g_wildRoutineInfo.callScript.cpuAddress,
+             g_wildRoutineInfo.wildBattleScriptBank,
+             g_wildRoutineInfo.wildBattleScriptAddr);
+    }
+
+    // Si ya corre un guion (texto, evento, otra batalla), el juego no
+    // tiraria encuentro: el jugador no esta caminando. Llamar aqui
+    // pisaria wScriptBank/wScriptPos del guion en curso. Sin evento.
+    if (g_mmu->read(g_wildRoutineInfo.scriptRunningAddr) != 0) {
+        return makeWildResult(env, 0, group, map, 0, 0);
+    }
+
+    // Llamada controlada a RandomEncounter (200k instrucciones de
+    // presupuesto: la rutina es corta; Random, las tablas y el farcall
+    // caben de sobra). Es la entrada del juego para el paso: revisa su
+    // cooldown, la hierba, la tirada, el repelente e instala el guion.
+    uint16_t outAF = 0;
+    const gpsquest96::Cpu::CallResult res = g_cpu->callRoutine(
+        g_wildRoutineInfo.randomEncounter.bank,
+        g_wildRoutineInfo.randomEncounter.cpuAddress,
+        200000, outAF);
+    if (res == gpsquest96::Cpu::CallResult::BANK_SWITCH_FAILED) {
+        return makeWildResult(env, -5, group, map, 0, 0);
+    }
+    if (res == gpsquest96::Cpu::CallResult::TIMEOUT) {
+        LOGI("B2 paso real: RandomEncounter agoto el presupuesto");
+        return makeWildResult(env, -4, group, map, 0, 0);
+    }
+    if (res == gpsquest96::Cpu::CallResult::NO_MMU) {
+        return makeWildResult(env, -1, group, map, 0, 0);
+    }
+
+    // RandomEncounter devuelve con carry puesto si instalo el guion de
+    // batalla, y con carry libre si no hay encuentro (cooldown, sin
+    // hierba, tirada fallida o repelente). El carry es el bit 4 de F.
+    const bool encounter = (outAF & 0x10) != 0;
+    if (!encounter) {
+        return makeWildResult(env, 0, group, map, 0, 0);
+    }
+    const int species =
+        g_mmu->read(g_wildRoutineInfo.tempWildMonSpeciesAddr);
+    const int level = g_mmu->read(g_wildRoutineInfo.curPartyLevelAddr);
+    if (!verifyBattleScriptStarted(g_wildRoutineInfo)) {
+        LOGI("B2 paso real %d/%d: encuentro #%d Nv %d preparado, "
+             "guion de batalla sin instalar", group, map, species, level);
+        return makeWildResult(env, -6, group, map, species, level);
+    }
+    LOGI("B2 paso real %d/%d: encuentro #%d Nv %d", group, map, species,
+         level);
+    return makeWildResult(env, 1, group, map, species, level);
+}
+
+/**
  * Estado actual del emulador (spec 016, slice 3).
  * Lee el estado generico detectado por la PPU desde registros de hardware
  * (LCDC, STAT, SCX, SCY, WY, WX), sin direcciones de una partida concreta.
@@ -438,6 +609,8 @@ Java_com_gpsquest96_emulator_EmulatorBridge_nativeCloseRom(
         g_mmu->setCgbMode(false);
     }
     g_wildTable.clear();
+    g_wildRoutine.clear();
+    g_wildRoutineLocated = false;
     g_romLoader.close();
 }
 
