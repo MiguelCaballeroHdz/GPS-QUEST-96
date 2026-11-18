@@ -222,6 +222,37 @@ public class EmulatorBridge {
         return getWildTable(group, map, WILD_KIND_AUTO);
     }
 
+    /**
+     * Disparo fiel por paso real (spec 009, slice 3). Llama a
+     * RandomEncounter, la rutina del propio juego, y si hay encuentro
+     * la propia rutina instala WildBattleScript con CallScript.
+     * Solo llamar desde el hilo de emulacion.
+     *
+     * @return int[] [status, group, map, species, level] o null sin
+     *         ROM/MMU. status: 1 encuentro, 0 sin encuentro, negativo
+     *         error (ver WILD_STATUS_*).
+     */
+    public static final int WILD_STATUS_ENCOUNTER = 1;
+    public static final int WILD_STATUS_NONE = 0;
+    public static final int WILD_STATUS_NO_ROM = -1;
+    public static final int WILD_STATUS_NO_TABLE = -2;
+    public static final int WILD_STATUS_NOT_LOCATED = -3;
+    public static final int WILD_STATUS_TIMEOUT = -4;
+    public static final int WILD_STATUS_BANK_FAIL = -5;
+    public static final int WILD_STATUS_BATTLE_NOT_STARTED = -6;
+
+    public native int[] nativeTryWildEncounter();
+
+    /** Wrapper tolerante: nunca crashea la UI si el .so no tiene la funcion. */
+    public int[] tryWildEncounter() {
+        try {
+            return nativeTryWildEncounter();
+        } catch (Throwable t) {
+            Log.w(TAG, "Encuentro salvaje no disponible", t);
+            return null;
+        }
+    }
+
     // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
     // MÃ‰TODOS DE CONVENIENCIA (Java wrapper)
     // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•

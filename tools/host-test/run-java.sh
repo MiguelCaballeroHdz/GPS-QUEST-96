@@ -35,6 +35,7 @@ $JAVAC -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$ROOT/app/src/main/java/com/gpsquest96/route/RouteValidator.java" \
     "$ROOT/app/src/main/java/com/gpsquest96/route/RouteProgress.java" \
     "$ROOT/app/src/main/java/com/gpsquest96/route/RouteAutoAction.java" \
+    "$ROOT/app/src/main/java/com/gpsquest96/emulator/WildEncounterGate.java" \
     "$ROOT/app/src/main/java/com/gpsquest96/route/RouteBundle.java" \
     "$ROOT/app/src/main/java/com/gpsquest96/render/SpriteExtractor.java" \
     "$ROOT/app/src/main/java/com/gpsquest96/avatar/AvatarData.java" \
@@ -48,6 +49,7 @@ $JAVAC -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$ROOT/tools/host-test/java/test/hosttest/RouteValidatorHostTest.java" \
     "$ROOT/tools/host-test/java/test/hosttest/RouteProgressHostTest.java" \
     "$ROOT/tools/host-test/java/test/hosttest/RouteAutoActionHostTest.java" \
+    "$ROOT/tools/host-test/java/test/hosttest/WildEncounterGateHostTest.java" \
     "$ROOT/tools/host-test/java/test/hosttest/RouteBundleHostTest.java" \
     "$ROOT/tools/host-test/java/test/hosttest/IllustratedMapHostTest.java" \
     "$ROOT/tools/host-test/java/test/hosttest/SpriteExtractorHostTest.java" \
@@ -61,6 +63,7 @@ $JAVA -cp "$CP" hosttest.RouteHostTest
 $JAVA -cp "$CP" hosttest.RouteValidatorHostTest
 $JAVA -cp "$CP" hosttest.RouteProgressHostTest
 $JAVA -cp "$CP" hosttest.RouteAutoActionHostTest
+$JAVA -cp "$CP" hosttest.WildEncounterGateHostTest
 $JAVA -cp "$CP" hosttest.RouteBundleHostTest
 $JAVA -cp "$CP" hosttest.IllustratedMapHostTest
 $JAVA -cp "$CP" hosttest.SpriteExtractorHostTest
