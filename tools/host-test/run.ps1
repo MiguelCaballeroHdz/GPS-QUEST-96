@@ -29,7 +29,7 @@ if (-not (Test-Path $devcmd)) {
 $common = "`"$src\core\mmu.cpp`" `"$src\core\mbc.cpp`" `"$src\core\rom_loader.cpp`" `"$src\core\apu.cpp`""
 $commonPpu = "$common `"$src\core\ppu.cpp`""
 $commonCpu = "$commonPpu `"$src\core\cpu.cpp`""
-$commonWild = "$common `"$src\core\wild_table.cpp`""
+$commonWild = "$common `"$src\core\wild_table.cpp`" `"${src}\core\wild_routine.cpp`""
 
 $compileMmu = "`"$devcmd`" -arch=x64 -no_logo && cd /d `"$out`" && " +
               "cl /nologo /std:c++17 /EHsc " +

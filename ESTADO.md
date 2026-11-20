@@ -12,7 +12,7 @@ Resumen de `memory/archivo/estado_actual-2026-11.md` + `tasks-2026-11.md`. Solo 
 **Motor**
 - 007 CGB: slices 1-2 + timing parcial verdes; gate POCO parcial (Gen 2 en color, `CONTINUE` OK). Falta caminar el cuarto de Gen 1 en DMG; HDMA HBlank solo si el overworld falla.
 - 008 Guardado real + `.pueblo`: slices 1-2 hechos; falta la prueba destructiva (`pm clear` u otro equipo) y guardar en Gen 1 (DMG).
-- 009 B2 spawns: slices 1-2 hechos (tablas + mapa actual); el slice 3 (inyección por paso real) no está en el árbol y depende de 016.
+- 009 B2 spawns: slices 1-2 hechos (tablas + mapa actual); slice 3 host-hecho el 2026-11-18 en rama `009-slice-3` (localizador por firma de las 4 rutinas + llamada controlada a `RandomEncounter` + verificacion del guion de batalla + puerta MAP de 016 + tregua 180 s; host tests 0 fallos). Pendiente: gate POCO (encuentro real en ruta 29 con especie/nivel de la tabla; sin encuentro en interiores; guardado intacto).
 - B4 sprite OW: código y DMA de OAM listos; falta la foto del overworld en POCO (`hits=3` ya confirmado). Fix flips 2026-11-10 (rama `fix-sprite-flips`): flips OAM de la entrada TL cableados a `composeSprite` + giro inmediato sin esperar confirmación; host 33 comprobaciones, 0 fallos. El sprite ROM ya no se dibuja en el mapa desde 017 slice 1 (avatar propio de Miguel); la verificación de los flips en POCO queda sustituida por la del avatar.
 - Deudas abiertas: APU (audio), timing fino CPU/PPU, RTC MBC3.
 

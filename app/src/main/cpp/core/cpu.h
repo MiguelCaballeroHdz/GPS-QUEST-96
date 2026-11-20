@@ -114,6 +114,42 @@ public:
      */
     int stepAndSync();
 
+    /**
+     * Llamada controlada a una rutina del juego (spec 009, slice 3).
+     *
+     * Guarda el estado completo del juego (registros, SP, PC, IME, HALT
+     * y banco ROM), cambia al banco de la rutina, empuja una direccion
+     * de retorno centinela (0x0000: la entrada del boot, el juego nunca
+     * salta ahi) y ejecuta la rutina paso a paso con `step()` (sin
+     * sincronizar la PPU en mitad de la llamada) hasta que PC vuelve al
+     * centinela o se agota `maxSteps`. Restaura TODO el estado, pase lo
+     * que pase. Las escrituras en WRAM que la rutina haga (p. ej. el
+     * juego preparando el encuentro) quedan: son el efecto buscado.
+     *
+     * Las interrupciones se desactivan durante la llamada: una IRQ en
+     * mitad de la rutina desviaria PC al vector y la deteccion de
+     * retorno fallaria. El estado de IME/HALT se restaura al salir.
+     *
+     * @param bank banco MBC de la rutina (0 = banco fijo 0x0000-0x3FFF)
+     * @param address direccion CPU de la rutina (0x0000-0x7FFF)
+     * @param maxSteps presupuesto de instrucciones; <= 0 usa 1
+     * @param outAF registro AF al retornar la rutina (A = resultado)
+     * @return OK, NO_MMU, BANK_SWITCH_FAILED o TIMEOUT
+     */
+    enum class CallResult : uint8_t {
+        OK = 0,
+        NO_MMU = 1,
+        BANK_SWITCH_FAILED = 2,
+        TIMEOUT = 3
+    };
+    CallResult callRoutine(uint16_t bank, uint16_t address, int maxSteps,
+                           uint16_t& outAF);
+
+    /** Estado de interrupciones (IME). Solo lectura para diagnostico. */
+    bool interruptsEnabled() const { return ime_; }
+    void setInterruptsEnabled(bool on) { ime_ = on; }
+    void setHalted(bool h) { halted_ = h; }
+
     uint16_t getHL() const { return (static_cast<uint16_t>(h_) << 8) | l_; }
     void setHL(uint16_t hl) { h_ = (hl >> 8) & 0xFF; l_ = hl & 0xFF; }
 

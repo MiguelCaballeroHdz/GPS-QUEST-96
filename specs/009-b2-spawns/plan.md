@@ -1,6 +1,6 @@
 # plan.md — 009 B2 spawns desde ROM (Gen 2)
 
-Estado: **APROBADO** 2026-10-27. **Slices 1 y 2 HECHOS**; siguiente slice 3.
+Estado: **APROBADO** 2026-10-27. **Slices 1 y 2 HECHOS**; slice 3 host-hecho el 2026-11-18 (inicio de batalla resuelto; falta el gate POCO).
 Spec: `specs/009-b2-spawns/spec.md`.
 Regla: ningún slice de código se ejecuta hasta que la spec esté APROBADA.
 
@@ -96,6 +96,65 @@ del propio juego si el mapa actual tiene tabla.
 
 **Criterio de salida:** gate POCO de B2 con evidencia de al menos un encuentro real
 cuya especie/nivel esté en la tabla de ruta inicial.
+
+**Resultado (2026-11-18, host; NO cerrado, falta el inicio de batalla):**
+rama `009-slice-3` (desde `004-slice-5`). Build `2026-11-18+spec009-slice3+spec004-slice5`.
+- Localizador por firma (`core/wild_routine.{h,cpp}`): `TryWildEncounter` (28 B,
+  revela `wTempWildMonSpecies` y `wBattleType`) y ancla de `ChooseWildEncounter`
+  (revela `wCurPartyLevel`); exactamente un match o nada (0 = NOT_FOUND,
+  >1 = AMBIGUOUS); rechaza matches que crucen banco y direcciones fuera de
+  WRAM. Verificado contra el desensamblado publico de Crystal
+  (pret/pokecrystal, `engine/overworld/wildmons.asm`): `TryWildEncounter`
+  devuelve A=0 (Z=1) con el encuentro preparado y NO arranca la batalla
+  el mismo; el arranque lo hace su llamador, que no esta en `wildmons.asm`,
+  `movement.asm` ni `overworld.asm`.
+- Llamada controlada (`Cpu::callRoutine`): salva/restaura AF/BC/DE/HL/SP/PC/
+  IME/HALT/banco ROM; centinela de retorno `0x0000`; timeout por presupuesto
+  de pasos; `BANK_SWITCH_FAILED` si el MBC no llega al banco.
+- `nativeTryWildEncounter()` (JNI): mapa por `0xDCB5` + puerta de tabla +
+  llamada a la rutina + lectura de especie/nivel de las direcciones
+  reveladas por la firma. Estados: 1 encuentro, 0 sin encuentro, -1 sin
+  ROM/CPU/MMU, -2 sin tabla, -3 rutina no localizada/ambigua, -4 timeout,
+  -5 cambio de banco fallido, **-6 encuentro preparado pero batalla sin
+  arrancar**.
+- **Inicio de batalla RESUELTO (2026-11-18, investigacion del
+  desensamblado publico):** la entrada fiel es `RandomEncounter`
+  (`engine/overworld/events.asm`), unico llamador de
+  `TryWildEncounter`: revisa el cooldown del juego
+  (`CheckWildEncounterCooldown`: contador que se decrementa por
+  llamada), `CanEncounterWildMon` (sin encuentros desactivados,
+  hierba o cueva/mazmorra, no hielo) y el concurso de bichos; si hay
+  encuentro, carga el banco/direccion de `WildBattleScript`
+  (`randomwildmon; startbattle; reloadmapafterbattle; end`) y llama
+  a `CallScript` (`home/map.asm`: wScriptBank/wScriptPos y
+  PLAYEREVENT_MAPSCRIPT en wScriptRunning). El `farcall` es
+  `ld a, BANK; ld hl; rst $08` (FarCall en RST $08 = 0xCF,
+  verificado en el mirror de main.asm). `nativeTryWildEncounter()`
+  llama a `RandomEncounter` por llamada controlada, lee el carry
+  (bit 4 de F: puesto = encuentro) y verifica que el guion quedo
+  instalado (wScriptRunning + par banco/direccion, salvaje o de
+  concurso); si el carry esta puesto pero el guion no quedo
+  instalado, devuelve -6. Antes de llamar, exige wScriptRunning = 0
+  para no pisar un guion en curso. `startWildBattle()` (stub) se
+  sustituyo por `verifyBattleScriptStarted()`. No se invento ningun
+  guion ni se escribio a mano en WRAM.
+- Puerta Java (`WildEncounterGate`, pura): MAP (estado 016) + sin tregua
+  (180 s) + con tabla. `GameEngine.onRealStep()` encola por paso real en
+  `GPS_REAL`; `maybeTryWildEncounter()` corre en el hilo de emulacion
+  tras `checkEmulatorState()`. `MainActivity` no necesito cambios
+  (`onWildEncounter` ya existia).
+- Host tests: Java `run-java.sh` OK (incl. `WildEncounterGateHostTest`,
+  7 comprobaciones); `test_wildtable` 71 comprobaciones, 0 fallos
+  (localizador sintetico de las cuatro rutinas + negativos y cruces;
+  rama de ROM real bajo `GPSQUEST_ROM_GEN2`); `test_lr35902` 55 comprobaciones, 0 fallos
+  (callRoutine: banco 0, anidada, timeout, banco 1, HALT, IRQ pendiente);
+  `test_mmu` 34, `test_sav` 18, `test_cgb_ppu` 51, sin regresiones.
+  `native_bridge.cpp` y los `core/*.cpp` nuevos compilan para Android
+  (NDK 26 clang++, aarch64 API 21); el build Gradle completo sigue
+  pendiente en la PC de Miguel.
+- Criterio de salida (gate POCO) **pendiente**: encuentro real en ruta 29
+  con especie/nivel de la tabla; sin encuentro en interiores; guardado
+  intacto.
 
 ### Slice 4 — Cierre documental y gate
 

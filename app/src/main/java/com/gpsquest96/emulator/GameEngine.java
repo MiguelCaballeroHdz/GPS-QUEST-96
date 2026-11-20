@@ -71,6 +71,12 @@ public class GameEngine {
     // Estado actual del emulador (spec 016, slice 3). Volatile: lo escribe
     // el hilo de emulacion y lo lee la UI.
     private volatile EmulatorState currentState = EmulatorState.BOOT;
+
+    // Spec 009, slice 3: peticion de encuentro encolada por onRealStep
+    // (hilo del sensor) y consumida en update() (hilo de emulacion), el
+    // unico que puede avanzar la CPU del juego. Un booleano basta: los
+    // pasos que llegan antes del siguiente frame colapsan en un intento.
+    private volatile boolean pendingWildEncounter = false;
     private int[] eventFlags = new int[256]; // Variables de progreso (RULES.md Ã‚Â§4)
 
     // Spec 004, slice 4: avance monotónico (R5, R6, R8). El progreso
@@ -349,6 +355,10 @@ public class GameEngine {
         // Spec 016, slice 3: sondear el estado del emulador una vez por frame.
         checkEmulatorState();
 
+        // Spec 009, slice 3: intento de encuentro por paso real (solo en
+        // el hilo de emulacion).
+        maybeTryWildEncounter();
+
         // Spec 004, slice 4: avance monotónico (R5, R6, R8) sobre la
         // doble validación del slice 3.
         maybeAdvanceRoute();
@@ -565,14 +575,93 @@ public class GameEngine {
     private int lastEvaluatedStep = 0;
 
     /**
-     * InyecciÃƒÂ³n de Spawns por Paso Real (Spec 009 Slice 3).
-     * Dispara la probabilidad de encuentro usando las tablas de la ROM
-     * asociadas al mapa actual. Solo en Modo GPS Real.
+     * Disparo fiel por paso real (spec 009, slice 3).
+     *
+     * Se llama desde el podometro (MainActivity, solo GPS_REAL y
+     * velocidad humana < 7 km/h). Aqui solo se decide y se encola: la
+     * llamada controlada a la CPU del juego corre en el hilo de
+     * emulacion (update -> maybeTryWildEncounter), nunca en el hilo
+     * del sensor. La puerta (WildEncounterGate) exige estado MAP de la
+     * spec 016, tabla en el mapa actual y fuera de tregua; la tirada,
+     * la especie y el nivel los decide la rutina del propio juego.
+     *
+     * @return true si se encolo un intento de encuentro.
      */
     public boolean onRealStep(int stepCount) {
-        // TODO (Slice 3 reescrito): reimplementar sobre API genérica de estados del emulador.
-        // Por ahora no dispara encuentros; espera a la arquitectura base genérica (Spec 016).
-        return false;
+        if (stepCount == lastEvaluatedStep) return false; // sin paso nuevo
+        if (stepCount < lastEvaluatedStep) {
+            // El podometro se reinicio (reboot del sensor): no perder pasos.
+            Log.i(TAG, "Podometro reiniciado: " + lastEvaluatedStep
+                    + " -> " + stepCount);
+        }
+        lastEvaluatedStep = stepCount;
+        if (!isRunning || isPaused) return false;
+        if (emulatorBridge == null) return false;
+        if (controlModeManager != null
+                && controlModeManager.getCurrentMode()
+                        != ControlModeManager.ControlMode.GPS_REAL) {
+            return false; // RF-04: solo en GPS_REAL, nunca en SOFA.
+        }
+        int[] map = emulatorBridge.getCurrentMap();
+        if (map == null || map.length < 2) return false;
+        WildEncounterGate.Decision decision = WildEncounterGate.decide(
+                currentState == EmulatorState.MAP,
+                emulatorBridge.getWildTable(map[0], map[1]) != null,
+                saveManager != null && saveManager.isInTruce());
+        if (decision != WildEncounterGate.Decision.ALLOW) return false;
+        pendingWildEncounter = true;
+        return true;
+    }
+
+    /**
+     * Spec 009, slice 3: consume la peticion de encuentro encolada por
+     * onRealStep en el hilo de emulacion, el unico que puede avanzar la
+     * CPU del juego. La llamada controlada corre aqui; si el juego
+     * prepara un encuentro, se inicia la tregua de 180 s y se avisa al
+     * listener en el hilo principal.
+     */
+    private void maybeTryWildEncounter() {
+        if (!pendingWildEncounter) return;
+        pendingWildEncounter = false;
+        if (emulatorBridge == null) return;
+        // La puerta se revalida aqui: el estado pudo cambiar entre el
+        // paso y este frame (p. ej. entro en batalla por otro camino).
+        if (currentState != EmulatorState.MAP) return;
+        if (saveManager != null && saveManager.isInTruce()) return;
+        int[] result = emulatorBridge.tryWildEncounter();
+        if (result == null || result.length < 5) return;
+        int status = result[0];
+        if (status == EmulatorBridge.WILD_STATUS_BATTLE_NOT_STARTED) {
+            Log.i(TAG, "B2 encuentro preparado pero la batalla no arranco "
+                    + "(rutina de arranque pendiente)");
+            return;
+        }
+        if (status != EmulatorBridge.WILD_STATUS_ENCOUNTER) {
+            if (status < 0) {
+                Log.i(TAG, "B2 intento de encuentro fallido: status " + status);
+            }
+            return;
+        }
+        // Encuentro real del juego: tregua de 180 s + aviso a la UI.
+        if (saveManager != null) {
+            saveManager.startTruce();
+        }
+        final int species = result[3];
+        final int level = result[4];
+        final int mapGroup = result[1];
+        final int mapNumber = result[2];
+        Log.i(TAG, "B2 encuentro por paso real: #" + species + " Nv " + level
+                + " mapa " + mapGroup + "/" + mapNumber);
+        if (listener != null) {
+            mainHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (listener != null) {
+                        listener.onWildEncounter(species, level, mapGroup, mapNumber);
+                    }
+                }
+            });
+        }
     }
 
     /**

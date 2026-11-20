@@ -44,6 +44,14 @@ static bool makeRom(const std::string& path) {
     rom[0x102] = 0x42;
     rom[0x200] = 0x10;             // STOP
     rom[0x201] = 0x00;
+    // Rutinas para callRoutine (spec 009, slice 3).
+    rom[0x150] = 0x3E; rom[0x151] = 0x42; rom[0x152] = 0xC9; // LD A,0x42; RET
+    rom[0x160] = 0xCD; rom[0x161] = 0x70; rom[0x162] = 0x01; // CALL 0x0170
+    rom[0x163] = 0x47; rom[0x164] = 0xC9;                   // LD B,A; RET
+    rom[0x170] = 0x3E; rom[0x171] = 0x77; rom[0x172] = 0xC9; // LD A,0x77; RET
+    rom[0x180] = 0xC3; rom[0x181] = 0x80; rom[0x182] = 0x01; // JP 0x0180 (bucle)
+    rom[0x190] = 0x76;                                       // HALT
+    rom[0x4000] = 0x3E; rom[0x4001] = 0x99; rom[0x4002] = 0xC9; // banco 1: LD A,0x99; RET
     rom[0x300] = 0x10;             // STOP
     rom[0x301] = 0x00;
 
@@ -149,6 +157,81 @@ int main(int argc, char** argv) {
         cpu.step(); // NOPs: 128 x 4 = 512 CPU-cycles = 256 ticks SYSCLK
     }
     CHECK(mmu.read(0xFF04) == 1);
+
+
+    // --- callRoutine (spec 009, slice 3): llamada controlada ---
+    {
+        cpu.initialize(); // PC=0x0100, SP=0xFFFE, IME=0, sin HALT
+        cpu.setAF(0x1230);
+        cpu.setBC(0x5678);
+        cpu.setDE(0x9ABC);
+        cpu.setHL(0xDEF0);
+        cpu.setSP(0xFFFE);
+        const uint16_t bankBefore = mmu.currentRomBank();
+        uint16_t outAF = 0;
+
+        // (a) Rutina en banco 0: devuelve A=0x42 y restaura todo.
+        auto r = cpu.callRoutine(0, 0x0150, 1000, outAF);
+        CHECK(r == gpsquest96::Cpu::CallResult::OK);
+        CHECK((outAF >> 8) == 0x42);
+        CHECK(cpu.getAF() == 0x1230);
+        CHECK(cpu.getBC() == 0x5678);
+        CHECK(cpu.getDE() == 0x9ABC);
+        CHECK(cpu.getHL() == 0xDEF0);
+        CHECK(cpu.getSP() == 0xFFFE);
+        CHECK(cpu.getPC() == 0x0100);
+        CHECK(mmu.currentRomBank() == bankBefore);
+
+        // (b) Llamada anidada: CALL interno + RET; A=0x77 al salir.
+        r = cpu.callRoutine(0, 0x0160, 1000, outAF);
+        CHECK(r == gpsquest96::Cpu::CallResult::OK);
+        CHECK((outAF >> 8) == 0x77);
+        CHECK(cpu.getAF() == 0x1230);
+        CHECK(cpu.getSP() == 0xFFFE);
+        CHECK(cpu.getPC() == 0x0100);
+
+        // (c) Bucle infinito: TIMEOUT y estado restaurado.
+        r = cpu.callRoutine(0, 0x0180, 100, outAF);
+        CHECK(r == gpsquest96::Cpu::CallResult::TIMEOUT);
+        CHECK(cpu.getAF() == 0x1230);
+        CHECK(cpu.getSP() == 0xFFFE);
+        CHECK(cpu.getPC() == 0x0100);
+
+        // (d) Rutina en banco 1: cambia el banco, ejecuta y restaura.
+        r = cpu.callRoutine(1, 0x4000, 1000, outAF);
+        CHECK(r == gpsquest96::Cpu::CallResult::OK);
+        CHECK((outAF >> 8) == 0x99);
+        CHECK(mmu.currentRomBank() == bankBefore);
+        CHECK(cpu.getPC() == 0x0100);
+
+        // (e) CPU en HALT: la llamada corre igual y el HALT se restaura.
+        cpu.setPC(0x0190);
+        cpu.step(); // HALT
+        CHECK(cpu.isHalted());
+        r = cpu.callRoutine(0, 0x0150, 1000, outAF);
+        CHECK(r == gpsquest96::Cpu::CallResult::OK);
+        CHECK((outAF >> 8) == 0x42);
+        CHECK(cpu.isHalted());
+        CHECK(cpu.getPC() == 0x0191); // HALT en 0x0190: el fetch avanza PC
+
+        // (f) Interrupcion pendiente + IME: no desvia la llamada y el
+        // estado de IME se restaura (el siguiente step() la atiende).
+        cpu.setHalted(false);
+        cpu.setInterruptsEnabled(true);
+        mmu.setInterruptEnable(0x01);
+        mmu.setInterruptFlags(0x00);
+        mmu.requestInterrupt(0);
+        r = cpu.callRoutine(0, 0x0150, 1000, outAF);
+        CHECK(r == gpsquest96::Cpu::CallResult::OK);
+        CHECK((outAF >> 8) == 0x42);
+        CHECK(cpu.interruptsEnabled());
+        CHECK(cpu.getPC() == 0x0191);
+        cpu.step(); // NOP en 0x0191 y la IRQ pendiente se atiende
+        CHECK(cpu.getPC() == 0x0040); // vector VBlank
+        mmu.setInterruptFlags(0x00);
+        mmu.setInterruptEnable(0x00);
+        cpu.setInterruptsEnabled(false);
+    }
 
     loader.close();
     std::remove(rom.c_str());

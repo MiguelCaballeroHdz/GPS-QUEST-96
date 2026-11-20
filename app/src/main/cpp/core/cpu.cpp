@@ -133,6 +133,81 @@ int Cpu::stepAndSync() {
     return cycles;
 }
 
+Cpu::CallResult Cpu::callRoutine(uint16_t bank, uint16_t address,
+                                 int maxSteps, uint16_t& outAF) {
+    outAF = 0;
+    if (mmu_ == nullptr) {
+        return CallResult::NO_MMU;
+    }
+    if (maxSteps <= 0) {
+        maxSteps = 1;
+    }
+
+    // Guardar el estado completo del juego.
+    const uint16_t savedAF = getAF();
+    const uint16_t savedBC = getBC();
+    const uint16_t savedDE = getDE();
+    const uint16_t savedHL = getHL();
+    const uint16_t savedSP = sp_;
+    const uint16_t savedPC = pc_;
+    const bool savedIme = ime_;
+    const bool savedHalted = halted_;
+    const bool savedHaltBug = haltBug_;
+    const uint16_t savedBank = mmu_->currentRomBank();
+
+    ime_ = false;
+    halted_ = false;
+    haltBug_ = false;
+
+    // Cambiar al banco de la rutina y comprobarlo. Si el MBC no llega
+    // (p. ej. banco alto en MBC1 sin escribir 0x4000), fallar sin tocar
+    // el juego: restaurar interrupciones y salir.
+    if (bank != 0) {
+        mmu_->write(0x2000, static_cast<uint8_t>(bank & 0xFF));
+        if (mmu_->currentRomBank() != bank) {
+            ime_ = savedIme;
+            halted_ = savedHalted;
+            haltBug_ = savedHaltBug;
+            return CallResult::BANK_SWITCH_FAILED;
+        }
+    }
+
+    // Direccion de retorno centinela: 0x0000 (entrada del boot). El RET
+    // final de la rutina la saca a PC y ahi se detecta el retorno sin
+    // ejecutar nada mas.
+    constexpr uint16_t kReturnSentinel = 0x0000;
+    sp_ = static_cast<uint16_t>(sp_ - 2);
+    mmu_->writeWord(sp_, kReturnSentinel);
+    pc_ = address;
+
+    CallResult result = CallResult::TIMEOUT;
+    for (int i = 0; i < maxSteps; ++i) {
+        step();
+        if (pc_ == kReturnSentinel) {
+            result = CallResult::OK;
+            break;
+        }
+    }
+    outAF = getAF();
+
+    // Restaurar TODO el estado del juego, pase lo que pase. SP vuelve a
+    // su valor guardado (descarta el centinela y lo que la rutina
+    // apilara); PC, registros, IME, HALT y banco quedan como estaban.
+    setAF(savedAF);
+    setBC(savedBC);
+    setDE(savedDE);
+    setHL(savedHL);
+    sp_ = savedSP;
+    pc_ = savedPC;
+    ime_ = savedIme;
+    halted_ = savedHalted;
+    haltBug_ = savedHaltBug;
+    if (bank != 0) {
+        mmu_->write(0x2000, static_cast<uint8_t>(savedBank & 0xFF));
+    }
+    return result;
+}
+
 int Cpu::toPpuCycles(int cycles) const {
     if (mmu_ != nullptr && mmu_->isDoubleSpeed()) {
         return cycles >> 1; // CPU a 2x: la PPU avanza la mitad por M-cycle
