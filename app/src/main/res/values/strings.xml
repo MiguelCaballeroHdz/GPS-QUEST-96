@@ -70,6 +70,11 @@
     <string name="msg_route_export_failed" tools:ignore="MissingTranslation">No se pudo exportar la ruta: %1$s</string>
     <string name="msg_route_import_failed" tools:ignore="MissingTranslation">No se pudo importar la ruta: %1$s</string>
     <string name="msg_route_imported" tools:ignore="MissingTranslation">Ruta importada: %1$d nodos (%2$d POI)</string>
+    <string name="msg_route_skip_title" tools:ignore="MissingTranslation">Saltar nodo de la ruta</string>
+    <string name="msg_route_skip_confirm" tools:ignore="MissingTranslation">El nodo %1$d (%2$s, %3$s) quedará marcado como saltado: no contará como resuelto y el re-enganche ya no volverá a él. No se puede deshacer. ¿Saltarlo?</string>
+    <string name="msg_route_skip_button" tools:ignore="MissingTranslation">Saltar</string>
+    <string name="msg_route_skipped" tools:ignore="MissingTranslation">Nodo %1$d saltado</string>
+    <string name="msg_route_skip_none" tools:ignore="MissingTranslation">Sin nodos pendientes para saltar</string>
     <string name="msg_only_gb_gbc_gba" tools:ignore="MissingTranslation">Solo ROMs GB/GBC/GBA</string>
     <string name="msg_gba_pending" tools:ignore="MissingTranslation">GBA pendiente: épico ARM en construcción</string>
     <string name="msg_gba_pending_picker" tools:ignore="MissingTranslation">GBA pendiente: épico ARM en construcción. Elige una GB/GBC o pulsa atrás para Demo.</string>

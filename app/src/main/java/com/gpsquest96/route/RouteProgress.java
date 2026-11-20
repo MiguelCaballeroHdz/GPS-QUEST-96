@@ -27,6 +27,10 @@ import java.util.BitSet;
  *   </li>
  *   <li>{@code resueltos[]}: qué eventos ya ocurrieron. Solo crece: una
  *       vez resuelto, un nodo nunca se deshace (R8).</li>
+ *   <li>{@code saltados[]}: qué nodos pendientes se saltaron a mano con la
+ *       válvula de escape (slice 6b, R10). Solo crece: un salto no se
+ *       deshace y el nodo saltado no cuenta como resuelto. El re-enganche
+ *       (R6) nunca vuelve a un nodo saltado.</li>
  * </ul>
  * <p>
  * <b>Modelo de avance (decisión del slice, §10 de la spec):</b> en cada fix
@@ -67,6 +71,15 @@ import java.util.BitSet;
  *       destino de arriba). Una vez terminada la ruta no se evalúa más:
  *       los pendientes que queden son trabajo de la válvula de escape
  *       (slice 6b), no de este slice.</li>
+ *   <li><b>Válvula de escape (slice 6b, R10):</b> {@link #skip} salta a mano
+ *       un nodo pendiente con confirmación y registro: el nodo queda en
+ *       {@code saltados[]} (no en {@code resueltos[]}) y el re-enganche ya
+ *       no vuelve a él. Solo se puede saltar un nodo ya alcanzado
+ *       (índice ≤ {@code posicion}): el futuro no está bloqueado todavía.
+ *       Saltar el nodo actual (índice == {@code posicion}) avanza la
+ *       posición en uno, como un avance sin resolver; saltar un pendiente
+ *       por detrás no mueve la posición. Saltar nunca resuelve ni
+ *       des-resuelve nada, y se persiste igual que el resto del progreso.</li>
  * </ul>
  * <p>
  * <b>Persistencia:</b> el progreso vive APARTE de la ruta (la ruta es un
@@ -95,22 +108,27 @@ public final class RouteProgress {
 
     private int posicion;
     private final BitSet resolved;
+    /** Nodos pendientes saltados a mano (slice 6b): nunca resueltos. */
+    private final BitSet skipped;
     private long updatedAtMs;
 
-    /** Progreso nuevo: posición 0, nada resuelto. */
+    /** Progreso nuevo: posición 0, nada resuelto ni saltado. */
     public RouteProgress(Route route) {
         if (route == null) throw new IllegalArgumentException("ruta nula");
         if (route.nodes.isEmpty()) throw new IllegalArgumentException("ruta sin nodos");
         this.route = route;
         this.posicion = 0;
         this.resolved = new BitSet(route.nodes.size());
+        this.skipped = new BitSet(route.nodes.size());
         this.updatedAtMs = System.currentTimeMillis();
     }
 
-    private RouteProgress(Route route, int posicion, BitSet resolved, long updatedAtMs) {
+    private RouteProgress(Route route, int posicion, BitSet resolved,
+            BitSet skipped, long updatedAtMs) {
         this.route = route;
         this.posicion = posicion;
         this.resolved = resolved;
+        this.skipped = skipped;
         this.updatedAtMs = updatedAtMs;
     }
 
@@ -133,6 +151,36 @@ public final class RouteProgress {
     /** Cuántos nodos están resueltos. */
     public int resolvedCount() {
         return resolved.cardinality();
+    }
+
+    /** true si el nodo {@code index} se saltó a mano (slice 6b). */
+    public boolean isSkipped(int index) {
+        if (index < 0 || index >= route.nodes.size()) return false;
+        return skipped.get(index);
+    }
+
+    /** Cuántos nodos se saltaron a mano. */
+    public int skippedCount() {
+        return skipped.cardinality();
+    }
+
+    /**
+     * Nodos pendientes (slice 6b): índice &lt; {@code posicion}, ni
+     * resueltos ni saltados. Son los que el re-enganche (R6) puede
+     * devolver al jugador y los que la válvula de escape puede saltar.
+     * En orden ascendente; lista vacía si no hay ninguno.
+     */
+    public java.util.List<Integer> pendingIndices() {
+        java.util.List<Integer> out = new java.util.ArrayList<Integer>();
+        for (int i = 0; i < posicion; i++) {
+            if (!resolved.get(i) && !skipped.get(i)) out.add(i);
+        }
+        return out;
+    }
+
+    /** Cuántos nodos pendientes hay (ni resueltos ni saltados). */
+    public int pendingCount() {
+        return pendingIndices().size();
     }
 
     /** true si {@code posicion} llegó al final de la ruta (R10). */
@@ -192,6 +240,91 @@ public final class RouteProgress {
     }
 
     // ------------------------------------------------------------------
+    // Válvula de escape (slice 6b, R10)
+    // ------------------------------------------------------------------
+
+    /** Resultado de {@link #skip(int)}. */
+    public static final class SkipOutcome {
+        /** Nodo saltado (-1 si se rechazó). */
+        public final int skippedIndex;
+        /** Posición antes del salto. */
+        public final int positionBefore;
+        /** Posición después del salto. */
+        public final int positionAfter;
+        /** true si la ruta quedó terminada tras el salto. */
+        public final boolean finished;
+        /** Motivo del rechazo; null si el salto se aplicó. */
+        public final String reason;
+
+        SkipOutcome(int skippedIndex, int positionBefore, int positionAfter,
+                boolean finished, String reason) {
+            this.skippedIndex = skippedIndex;
+            this.positionBefore = positionBefore;
+            this.positionAfter = positionAfter;
+            this.finished = finished;
+            this.reason = reason;
+        }
+
+        static SkipOutcome rejected(String reason) {
+            return new SkipOutcome(-1, -1, -1, false, reason);
+        }
+
+        /** true si el salto se aplicó. */
+        public boolean isOk() {
+            return reason == null;
+        }
+
+        /** Una línea de log: `R6b salto nodo=I pos=A→B [FIN]` o el rechazo. */
+        public String formatLog() {
+            if (!isOk()) return "R6b salto rechazado: " + reason;
+            StringBuilder sb = new StringBuilder();
+            sb.append("R6b salto nodo=").append(skippedIndex)
+                    .append(" pos=").append(positionBefore)
+                    .append("→").append(positionAfter);
+            if (finished) sb.append(" FIN");
+            return sb.toString();
+        }
+    }
+
+    /**
+     * Salta a mano un nodo pendiente (slice 6b, R10): la salida cuando el
+     * jugador no puede completar un evento y el re-enganche lo devuelve
+     * una y otra vez al mismo sitio. El nodo queda en {@code saltados[]}
+     * (no en {@code resueltos[]}: el evento no ocurrió) y el re-enganche
+     * ya no vuelve a él. La confirmación y el aviso al usuario los pone
+     * el llamador (MainActivity): aquí solo se decide y se registra.
+     * <p>
+     * Reglas: se rechaza si la ruta está terminada, si el índice está
+     * fuera de rango, si el nodo ya está resuelto o ya saltado, y si el
+     * nodo está por delante de {@code posicion} (el futuro no está
+     * bloqueado todavía). Saltar el nodo actual avanza {@code posicion}
+     * en uno (avance sin resolver); saltar un pendiente por detrás no la
+     * mueve. Nunca toca {@code resueltos[]}.
+     */
+    public SkipOutcome skip(int index) {
+        if (isFinished()) return SkipOutcome.rejected("ruta terminada");
+        if (index < 0 || index >= route.nodes.size()) {
+            return SkipOutcome.rejected("nodo fuera de rango: " + index);
+        }
+        if (resolved.get(index)) {
+            return SkipOutcome.rejected("nodo ya resuelto: " + index);
+        }
+        if (skipped.get(index)) {
+            return SkipOutcome.rejected("nodo ya saltado: " + index);
+        }
+        if (index > posicion) {
+            return SkipOutcome.rejected("nodo por delante de la posición: " + index);
+        }
+        int positionBefore = posicion;
+        skipped.set(index);
+        if (index == posicion) {
+            posicion = Math.min(posicion + 1, route.nodes.size());
+        }
+        updatedAtMs = System.currentTimeMillis();
+        return new SkipOutcome(index, positionBefore, posicion, isFinished(), null);
+    }
+
+    // ------------------------------------------------------------------
     // Avance (un fix GPS)
     // ------------------------------------------------------------------
 
@@ -219,6 +352,7 @@ public final class RouteProgress {
             int best = -1;
             for (int i = 0; i < posicion; i++) {
                 if (resolved.get(i)) continue;
+                if (skipped.get(i)) continue; // slice 6b: no volver a un salto
                 RouteNode n = route.nodes.get(i);
                 if (RouteGenerator.haversineM(fix.lat, fix.lon, n.lat, n.lon)
                         > REENGAGE_RADIUS_M) continue;
@@ -271,6 +405,13 @@ public final class RouteProgress {
                 .append(",\"resolved\":[");
         boolean first = true;
         for (int i = resolved.nextSetBit(0); i >= 0; i = resolved.nextSetBit(i + 1)) {
+            if (!first) sb.append(',');
+            first = false;
+            sb.append(i);
+        }
+        sb.append("],\"skipped\":[");
+        first = true;
+        for (int i = skipped.nextSetBit(0); i >= 0; i = skipped.nextSetBit(i + 1)) {
             if (!first) sb.append(',');
             first = false;
             sb.append(i);
@@ -330,8 +471,34 @@ public final class RouteProgress {
             prev = idx;
             resolved.set(idx);
         }
+        // Slice 6b: "skipped" es opcional (los progresos guardados antes
+        // del slice no lo traen): sin él, nada saltado. Si viene, se
+        // valida igual que "resolved" y no puede solapar con resueltos
+        // (un nodo es resuelto o saltado, nunca las dos cosas).
+        BitSet skipped = new BitSet(route.nodes.size());
+        JSONArray skippedArr = root.optJSONArray("skipped");
+        if (skippedArr != null) {
+            prev = -1;
+            for (int i = 0; i < skippedArr.length(); i++) {
+                int idx = skippedArr.optInt(i, Integer.MIN_VALUE);
+                if (idx < 0 || idx >= route.nodes.size()) {
+                    throw new RouteFormatException("progreso con saltado fuera de rango: "
+                            + idx);
+                }
+                if (idx <= prev) {
+                    throw new RouteFormatException("progreso con saltados sin orden: "
+                            + idx + " tras " + prev);
+                }
+                if (resolved.get(idx)) {
+                    throw new RouteFormatException("progreso con saltado ya resuelto: "
+                            + idx);
+                }
+                prev = idx;
+                skipped.set(idx);
+            }
+        }
         long updatedAt = root.optLong("updated_at", 0L);
-        return new RouteProgress(route, posicion, resolved, updatedAt);
+        return new RouteProgress(route, posicion, resolved, skipped, updatedAt);
     }
 
     /** Archivo del progreso: {@code <dir>/progress_<rom_key>.json}. */
@@ -398,6 +565,7 @@ public final class RouteProgress {
     @Override
     public String toString() {
         return "RouteProgress{" + route.romKey + " · pos " + posicion + "/"
-                + route.nodes.size() + " · resueltos " + resolvedCount() + "}";
+                + route.nodes.size() + " · resueltos " + resolvedCount()
+                + (skippedCount() > 0 ? " · saltados " + skippedCount() : "") + "}";
     }
 }

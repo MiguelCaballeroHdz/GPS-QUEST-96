@@ -47,6 +47,7 @@ $JAVAC -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$ROOT/tools/host-test/java/test/hosttest/RouteHostTest.java" \
     "$ROOT/tools/host-test/java/test/hosttest/RouteValidatorHostTest.java" \
     "$ROOT/tools/host-test/java/test/hosttest/RouteProgressHostTest.java" \
+    "$ROOT/tools/host-test/java/test/hosttest/RouteEscapeHostTest.java" \
     "$ROOT/tools/host-test/java/test/hosttest/RouteAutoActionHostTest.java" \
     "$ROOT/tools/host-test/java/test/hosttest/RouteBundleHostTest.java" \
     "$ROOT/tools/host-test/java/test/hosttest/IllustratedMapHostTest.java" \
@@ -60,6 +61,7 @@ $JAVA -cp "$CP" com.gpsquest96.gps.OsmClassifyHostTest
 $JAVA -cp "$CP" hosttest.RouteHostTest
 $JAVA -cp "$CP" hosttest.RouteValidatorHostTest
 $JAVA -cp "$CP" hosttest.RouteProgressHostTest
+$JAVA -cp "$CP" hosttest.RouteEscapeHostTest
 $JAVA -cp "$CP" hosttest.RouteAutoActionHostTest
 $JAVA -cp "$CP" hosttest.RouteBundleHostTest
 $JAVA -cp "$CP" hosttest.IllustratedMapHostTest

@@ -213,6 +213,16 @@
             android:padding="8dp" />
 
         <TextView
+            android:id="@+id/tv_opt_skip_route_node"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Saltar nodo pendiente"
+            android:textColor="#9BBC0F"
+            android:textSize="14sp"
+            android:fontFamily="monospace"
+            android:padding="8dp" />
+
+        <TextView
             android:id="@+id/tv_opt_view"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

@@ -260,10 +260,20 @@ spec 015, no a la 004.
   otro `rom_key`, formato/versión, checksum, traversal, entrada desconocida, tope
   de tamaño y guardado atómico). `BUILD_TAG 2026-11-07+spec004-slice6`; APK
   `F532C426…0E7AEA8`. **El ZIP solo se parsea: nada se ejecuta.**
-- **Estado 6b (válvula de escape / R10): pendiente.** Depende de `posicion` y
-  `resueltos[]` (slice 4): sin estado de nodo bloqueado no hay nada que saltar ni
-  que registrar. El §7.7 de la tabla corresponde a `enter` (slice 5) y no se cierra
-  con este paquete.
+- **Estado 6b (válvula de escape / R10): HECHO 2026-11-20.**
+  `RouteProgress.skip(i)` + `saltados[]` (BitSet aparte de
+  `resueltos[]`, persistido en `progress_<rom_key>.json` como campo
+  opcional `"skipped"`, esquema v1); solo se salta lo ya alcanzado
+  (índice ≤ `posicion`), con rechazos con motivo; saltar el actual
+  avanza en uno y puede terminar la ruta; el re-enganche (R6) ya no
+  vuelve a un nodo saltado. `GameEngine.skipRouteNode` + aviso
+  `onRouteNodeSkipped`; `MainActivity` pone la confirmación
+  (AlertDialog, salto no deshacer) en "Saltar nodo pendiente" del panel
+  de ajustes y la línea de ruta muestra `· saltados S`. Host
+  `RouteEscapeHostTest` **34 comprobaciones, total 644, 0 fallos**. El
+  §7.7 de la tabla corresponde a `enter` (slice 5) y no se cierra con
+  este paquete. **Dispositivo pendiente:** probar la válvula en calle
+  con un pendiente real (destino MISMATCH, exige el volcado POCO 005).
 
 ## Trazabilidad
 
@@ -275,7 +285,7 @@ spec 015, no a la 004.
 | 3 | 4/R3, 5.3 | 9, 10, 11 (*) | HECHO host 2026-11-10 (36 checks); dispositivo pendiente de calle |
 | 4 | 3.3, 4/R5-R8 | 5, 6 | HECHO host 2026-11-10 (47 checks); dispositivo pendiente |
 | 5 | 3.4, 4/R7, R9 | 12 (*) | HECHO host 2026-11-16 (58 checks, total 610); dispositivo pendiente (§7.7) |
-| 6 | 4/R10, 6 | 7 | 6a export/import HECHO 2026-11-07 (host 26); 6b válvula desbloqueada (el estado ya existe) |
+| 6 | 4/R10, 6 | 7 | 6a export/import HECHO 2026-11-07 (host 26); 6b válvula HECHO 2026-11-20 (host 34, total 644); dispositivo pendiente (calle + volcado POCO 005) |
 
 (*) Discrepancia: la spec aprobada §7 solo numera 8 criterios; no existen §7.9–11. Los checks de host del slice 3 son: tres señales logueadas por fix, cero escrituras, lecturas dudosas marcadas. Dispositivo pendiente de calle. Lo mismo aplica al §7.12 citado para el slice 5: no existe; el criterio de dispositivo real es §7.7.
 

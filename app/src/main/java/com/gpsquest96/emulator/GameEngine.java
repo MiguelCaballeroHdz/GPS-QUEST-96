@@ -132,6 +132,15 @@ public class GameEngine {
         default void onRouteNodeAction(int nodeIndex, RouteNode.Action action,
                 float bearingDeg) {
         }
+
+        /**
+         * Spec 004, slice 6b: un nodo pendiente se saltó a mano con la
+         * válvula de escape (R10). El nodo queda en `saltados[]`, no en
+         * `resueltos[]`. Método default; MainActivity lo implementa para
+         * actualizar la línea de ruta.
+         */
+        default void onRouteNodeSkipped(int nodeIndex) {
+        }
     }
 
     /**
@@ -504,6 +513,42 @@ public class GameEngine {
     /** Spec 004, slice 4: progreso de la ruta activa, o null si no hay. */
     public RouteProgress getRouteProgress() {
         return routeProgress;
+    }
+
+    /**
+     * Spec 004, slice 6b: válvula de escape (R10). Salta a mano un nodo
+     * pendiente de la ruta activa y persiste el progreso
+     * ({@code progress_<rom_key>.json}) si el salto se aplicó; el
+     * listener recibe {@code onRouteNodeSkipped} en el hilo principal.
+     * La confirmación la pone el llamador (MainActivity): aquí solo se
+     * decide, se registra y se guarda.
+     */
+    public RouteProgress.SkipOutcome skipRouteNode(int index) {
+        if (routeProgress == null) {
+            return RouteProgress.SkipOutcome.rejected("sin ruta activa");
+        }
+        RouteProgress.SkipOutcome outcome = routeProgress.skip(index);
+        if (!outcome.isOk()) return outcome;
+        Log.i(TAG, outcome.formatLog());
+        if (routeProgressFile != null) {
+            try {
+                routeProgress.save(routeProgressFile);
+            } catch (java.io.IOException e) {
+                Log.w(TAG, "No se pudo guardar el progreso de la ruta", e);
+            }
+        }
+        if (listener != null) {
+            final int skippedIndex = outcome.skippedIndex;
+            mainHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (listener != null) {
+                        listener.onRouteNodeSkipped(skippedIndex);
+                    }
+                }
+            });
+        }
+        return outcome;
     }
 
     /** Spec 004, slice 3: última validación R3, o null si aún no hay. */

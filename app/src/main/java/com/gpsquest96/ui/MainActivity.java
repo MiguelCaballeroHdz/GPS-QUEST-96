@@ -2199,6 +2199,12 @@ public class MainActivity extends Activity implements SensorEventListener {
                 openRouteImportPicker();
             }
         });
+        findViewById(R.id.tv_opt_skip_route_node).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                askSkipPendingRouteNode();
+            }
+        });
         // DiagnÃ³stico B4: long-press en "Vista" vuelca frame+OAM+VRAM crudos
         // para verificar orientaciÃ³n y sprite OW sin la UI encima.
         findViewById(R.id.tv_opt_view).setOnLongClickListener(new View.OnLongClickListener() {
@@ -3104,11 +3110,21 @@ public class MainActivity extends Activity implements SensorEventListener {
                 onboardPrefs().edit().putBoolean("route_nodo0_resuelto", true).apply();
             }
             if (gameEngine != null && gameEngine.getRouteProgress() != null) {
-                RouteProgress p = gameEngine.getRouteProgress();
-                lastRouteStatus = "Ruta: pos " + p.getPosition() + "/" + p.getNodeCount()
-                        + " · resueltos " + p.resolvedCount();
+                lastRouteStatus = routeStatusLine(gameEngine.getRouteProgress());
             }
             refreshOsmStatusLine();
+        }
+
+        @Override
+        public void onRouteNodeSkipped(final int nodeIndex) {
+            // Spec 004, slice 6b: ya llega en el hilo principal (GameEngine
+            // lo publica ahí). El nodo saltado no cuenta como resuelto.
+            Log.i("GameEngine", "004 nodo saltado: " + nodeIndex);
+            if (gameEngine != null && gameEngine.getRouteProgress() != null) {
+                lastRouteStatus = routeStatusLine(gameEngine.getRouteProgress());
+            }
+            refreshOsmStatusLine();
+            showBlockMessage(getString(R.string.msg_route_skipped, nodeIndex));
         }
 
         @Override
@@ -3150,6 +3166,52 @@ public class MainActivity extends Activity implements SensorEventListener {
             }
         }
     };
+
+    /** Línea de ruta: posición, resueltos y, si los hay, saltados (6b). */
+    private String routeStatusLine(RouteProgress p) {
+        String line = "Ruta: pos " + p.getPosition() + "/" + p.getNodeCount()
+                + " · resueltos " + p.resolvedCount();
+        if (p.skippedCount() > 0) line += " · saltados " + p.skippedCount();
+        return line;
+    }
+
+    /**
+     * Spec 004, slice 6b: válvula de escape (R10). Salta a mano el
+     * pendiente más alto (el que el re-enganche devolvería primero),
+     * con confirmación explícita: el salto no cuenta como resuelto y no
+     * se puede deshacer. Sin pendientes, solo avisa.
+     */
+    private void askSkipPendingRouteNode() {
+        if (gameEngine == null || gameEngine.getRouteProgress() == null) {
+            showBlockMessage(getString(R.string.msg_route_skip_none));
+            return;
+        }
+        RouteProgress progress = gameEngine.getRouteProgress();
+        java.util.List<Integer> pending = progress.pendingIndices();
+        if (pending.isEmpty()) {
+            showBlockMessage(getString(R.string.msg_route_skip_none));
+            return;
+        }
+        final int nodeIndex = pending.get(pending.size() - 1);
+        RouteNode node = progress.route.nodes.get(nodeIndex);
+        new AlertDialog.Builder(this)
+                .setTitle(getString(R.string.msg_route_skip_title))
+                .setMessage(getString(R.string.msg_route_skip_confirm,
+                        nodeIndex, node.action, node.poi))
+                .setPositiveButton(getString(R.string.msg_route_skip_button),
+                        new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface d, int which) {
+                                RouteProgress.SkipOutcome outcome =
+                                        gameEngine.skipRouteNode(nodeIndex);
+                                if (!outcome.isOk()) {
+                                    showBlockMessage(outcome.reason);
+                                }
+                            }
+                        })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
 
     @Override
     protected void onResume() {
