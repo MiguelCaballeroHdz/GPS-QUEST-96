@@ -209,6 +209,39 @@ secuencia.
   no se cierra con este paquete. La puerta de destino sigue inactiva
   (todos los nodos NO_DEST) y `map_id` sigue provisional.
 
+## 10c. Notas de implementación — slice 6b (2026-11-20, host)
+
+- **Válvula de escape (R10):** `RouteProgress.skip(i)` salta a mano un
+  nodo pendiente con confirmación y registro. El nodo queda en
+  `saltados[]`, un BitSet aparte de `resueltos[]`: el evento no ocurrió,
+  así que nunca cuenta como resuelto, y el re-enganche (R6) ya no vuelve
+  a él. Solo se salta lo ya alcanzado (índice ≤ `posicion`): el futuro
+  no está bloqueado todavía. Saltar el nodo actual avanza `posicion` en
+  uno (avance sin resolver, puede terminar la ruta); saltar un pendiente
+  por detrás no la mueve. Se rechaza con motivo si la ruta está
+  terminada, el índice está fuera de rango, el nodo ya está resuelto o
+  ya saltado, o está por delante de `posicion`.
+- **Persistencia:** `progress_<rom_key>.json` gana el campo opcional
+  `"skipped":[i,…]` (mismo esquema v1: los progresos guardados antes
+  del slice cargan con cero saltados). Se valida igual que
+  `"resolved"` (rango, orden estricto) y no puede solapar con
+  resueltos. Guardado atómico `.tmp` → `.bak` → rename, como el resto
+  del progreso.
+- **Cableado:** `GameEngine.skipRouteNode(i)` decide, persiste y avisa
+  `onRouteNodeSkipped` en el hilo principal; `MainActivity` pone la
+  confirmación (AlertDialog con nodo, acción y POI; el salto no se puede
+  deshacer) en la opción "Saltar nodo pendiente" del panel de ajustes,
+  salta el pendiente más alto (el que el re-enganche devolvería
+  primero) y actualiza la línea de ruta (`pos N/M · resueltos K ·
+  saltados S`).
+- **Host:** `RouteEscapeHostTest` **34 comprobaciones** (rechazos,
+  salto por detrás, salto del actual, fin de ruta por salto,
+  re-enganche bloqueado, persistencia y compatibilidad con JSON viejo),
+  total **644, 0 fallos**.
+- **Dispositivo pendiente:** la válvula solo se puede probar en calle
+  (un pendiente real con destino MISMATCH exige el volcado POCO de la
+  005); en host queda verificada la lógica completa.
+
 ## 9. Dependencias
 
 - **016** — estado del emulador e identidad de mapa por perfil.
