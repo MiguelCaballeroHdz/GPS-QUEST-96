@@ -6,6 +6,41 @@
 - Build: assembleDebug verde, APK verificado
 - Limpieza legal: 7/9 cambios Lote 3 ya estaban en objetivo
 
+## Diagnóstico del núcleo — 2026-11-23 (spec 020, rama `020-diag-nucleo`)
+
+Sesión lun 23 nov 06:00 (la del dom 22 nov se saltó por la pausa de tokens).
+Método: lectura del núcleo + host tests nuevos + medición del audio del
+video del gate POCO del 20 nov. Suite C++: 180 comprobaciones, 0 fallos
+(`test_apu` 35 nuevas, `test_timing` 19 nuevas; `run.sh` corre todo con
+`g++` en Linux). Detalle: `specs/020-pulir-emulacion/diagnostico-nucleo.md`.
+
+- **HALLAZGO GORDO (APU): la lógica lee `regs_[]` con +0x10.** `write()`
+  guarda en `regs_[address-0xFF10]`, pero length/envelope/sweep/duty/
+  volumen/DAC leen el registro de 0x10 más arriba. Medido: **ch3 (wave)
+  y ch4 (ruido) MUDOS siempre**; ch1/ch2 con tono/volumen/envelope del
+  canal vecino. Además el LFSR de ruido va 16x rápido (código, no medible
+  mientras el canal es mudo). Fix: slice 1 (reindexar + LFSR + timers).
+- **Audio esclavo de la emu:** bomba `postDelayed(16 ms)` sin vsync,
+  deuda que se descarta (tope 3 frames/tick, clamp 100 ms); si la emu va
+  por debajo de 59,73 fps la APU produce menos de 44 100 muestras/s y el
+  AudioTrack (≥46 ms) se vacía: cortes. Sin contador de underruns.
+  `refreshAtlasSnapshot()` corre en cada tick del hilo de emulación.
+  Fix: slice 2.
+- **Video a medias:** el GL lee `displayBuffer_` (copia única sin lock,
+  `memcpy` en VBlank) en vez del slot de `presentIndex_` del triple
+  búfer. Fix: slice 3 (publicar por triple búfer + vsync).
+- **Timing fino pendiente:** EI sin retardo, modo 3 fijo en 172, TIMA por
+  umbral (no por flanco de DIV). Fix: slice 4. RTC MBC3 sigue pendiente
+  (005, volcado POCO).
+- **Bien:** PPU exacta (80/172/204, VBlank 65664, frame 70224, 59,73 fps),
+  tabla de ciclos CPU, timers DIV/TIMA a 1x/2x, tasa de muestras 738/frame.
+- **Video gate 20 nov (audio):** 185 silencios ≥50 ms en 407 s (mediana
+  84 ms), irregulares: 55 en 150-180 s, ninguno en 120-150 s. Compatible
+  con underruns sistemáticos, sin poder distinguirlo de descansos de la
+  música solo con el audio.
+- Siguiente: slice 1 (APU) en la sesión del mié 25 nov 06:00; luego
+  slices 2-4, y con la emulación sólida, la spec 019.
+
 ## Estado vivo
 Resumen de `memory/archivo/estado_actual-2026-11.md` + `tasks-2026-11.md`. Solo lo que sigue abierto.
 
