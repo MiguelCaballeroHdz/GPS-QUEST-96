@@ -11,6 +11,26 @@ static const uint8_t DUTY_PATTERNS[4][8] = {
     {0, 1, 1, 1, 1, 1, 1, 0}  // 75%
 };
 
+// Índices en regs_[] (regs_[address - 0xFF10]). Toda la lógica usa estas
+// constantes con nombre: el bug D-APU-1 (spec 020) era leer regs_[0x10..]
+// — el registro de 0x10 más arriba — en vez de regs_[0x00..].
+static constexpr int NR10 = 0x00, NR11 = 0x01, NR12 = 0x02, NR13 = 0x03, NR14 = 0x04;
+static constexpr int NR16 = 0x06, NR17 = 0x07, NR18 = 0x08, NR19 = 0x09;
+static constexpr int NR30 = 0x0A, NR31 = 0x0B, NR32 = 0x0C, NR33 = 0x0D, NR34 = 0x0E;
+static constexpr int NR41 = 0x10, NR42 = 0x11, NR43 = 0x12, NR44 = 0x13;
+static constexpr int NR50 = 0x14, NR51 = 0x15, NR52 = 0x16;
+
+// Periodo del LFSR de ruido en ciclos de CPU (D-APU-2, spec 020).
+// Hardware: periodo = divisor * 2^(shift+4) ciclos
+// (f = 524288 / (divisor * 2^(shift+1)) Hz). Antes era divisor << shift,
+// 16x más rápido.
+static int ch4Period(uint8_t nr43) {
+    static const int DIVISORS[8] = {8, 16, 32, 48, 64, 80, 96, 112};
+    int shift = (nr43 >> 4) & 0x0F;
+    int divisorCode = nr43 & 0x07;
+    return DIVISORS[divisorCode] << (shift + 4);
+}
+
 Apu::Apu() {
     initialize();
 }
@@ -54,9 +74,10 @@ void Apu::reset() {
 void Apu::step(int cycles) {
     if (!apuEnabled_) return;
 
-    // Frame Sequencer (512 Hz -> 8192 ciclos CPU por paso)
+    // Frame Sequencer (512 Hz -> 8192 ciclos CPU por paso). `while`, no
+    // `if` (D-APU-4): un paso grande no debe atrasar el sequencer.
     frameSequencerCycle_ += cycles;
-    if (frameSequencerCycle_ >= 8192) {
+    while (frameSequencerCycle_ >= 8192) {
         frameSequencerCycle_ -= 8192;
         clockFrameSequencer();
     }
@@ -64,8 +85,10 @@ void Apu::step(int cycles) {
     // Temporizador Canal 1
     if (ch1Enabled_) {
         ch1Timer_ -= cycles;
-        if (ch1Timer_ <= 0) {
-            ch1Timer_ += (2048 - ch1Frequency_) * 4;
+        int period = (2048 - ch1Frequency_) * 4;
+        if (period <= 0) period = 4; // freq 2048: sin periodo 0 (bucle)
+        while (ch1Timer_ <= 0) {
+            ch1Timer_ += period;
             ch1DutyPos_ = (ch1DutyPos_ + 1) & 7;
         }
     }
@@ -73,8 +96,10 @@ void Apu::step(int cycles) {
     // Temporizador Canal 2
     if (ch2Enabled_) {
         ch2Timer_ -= cycles;
-        if (ch2Timer_ <= 0) {
-            ch2Timer_ += (2048 - ch2Frequency_) * 4;
+        int period = (2048 - ch2Frequency_) * 4;
+        if (period <= 0) period = 4;
+        while (ch2Timer_ <= 0) {
+            ch2Timer_ += period;
             ch2DutyPos_ = (ch2DutyPos_ + 1) & 7;
         }
     }
@@ -82,8 +107,10 @@ void Apu::step(int cycles) {
     // Temporizador Canal 3
     if (ch3Enabled_) {
         ch3Timer_ -= cycles;
-        if (ch3Timer_ <= 0) {
-            ch3Timer_ += (2048 - ch3Frequency_) * 2;
+        int period = (2048 - ch3Frequency_) * 2;
+        if (period <= 0) period = 2;
+        while (ch3Timer_ <= 0) {
+            ch3Timer_ += period;
             ch3SampleIdx_ = (ch3SampleIdx_ + 1) & 31;
         }
     }
@@ -91,15 +118,12 @@ void Apu::step(int cycles) {
     // Temporizador Canal 4
     if (ch4Enabled_) {
         ch4Timer_ -= cycles;
-        if (ch4Timer_ <= 0) {
-            int shift = (regs_[0x22] >> 4) & 0x0F;
-            int divisorCode = regs_[0x22] & 0x07;
-            static const int DIVISORS[8] = {8, 16, 32, 48, 64, 80, 96, 112};
-            ch4Timer_ += (DIVISORS[divisorCode] << shift);
+        while (ch4Timer_ <= 0) {
+            ch4Timer_ += ch4Period(regs_[NR43]);
 
             int xorResult = (ch4Lfsr_ & 1) ^ ((ch4Lfsr_ >> 1) & 1);
             ch4Lfsr_ = (ch4Lfsr_ >> 1) | (xorResult << 14);
-            if (regs_[0x22] & 0x08) { // 7-bit LFSR mode
+            if (regs_[NR43] & 0x08) { // 7-bit LFSR mode
                 ch4Lfsr_ = (ch4Lfsr_ & ~0x40) | (xorResult << 6);
             }
         }
@@ -131,29 +155,29 @@ void Apu::clockFrameSequencer() {
 
 void Apu::clockLength() {
     // Ch 1
-    if ((regs_[0x14] & 0x40) && ch1LengthTimer_ > 0) {
+    if ((regs_[NR14] & 0x40) && ch1LengthTimer_ > 0) {
         if (--ch1LengthTimer_ == 0) ch1Enabled_ = false;
     }
     // Ch 2
-    if ((regs_[0x19] & 0x40) && ch2LengthTimer_ > 0) {
+    if ((regs_[NR19] & 0x40) && ch2LengthTimer_ > 0) {
         if (--ch2LengthTimer_ == 0) ch2Enabled_ = false;
     }
     // Ch 3
-    if ((regs_[0x1E] & 0x40) && ch3LengthTimer_ > 0) {
+    if ((regs_[NR34] & 0x40) && ch3LengthTimer_ > 0) {
         if (--ch3LengthTimer_ == 0) ch3Enabled_ = false;
     }
     // Ch 4
-    if ((regs_[0x24] & 0x40) && ch4LengthTimer_ > 0) {
+    if ((regs_[NR44] & 0x40) && ch4LengthTimer_ > 0) {
         if (--ch4LengthTimer_ == 0) ch4Enabled_ = false;
     }
 }
 
 void Apu::clockEnvelope() {
     // Ch 1
-    if (ch1Enabled_ && (regs_[0x12] & 0x07)) {
-        if (++ch1EnvelopeTimer_ >= (regs_[0x12] & 0x07)) {
+    if (ch1Enabled_ && (regs_[NR12] & 0x07)) {
+        if (++ch1EnvelopeTimer_ >= (regs_[NR12] & 0x07)) {
             ch1EnvelopeTimer_ = 0;
-            if (regs_[0x12] & 0x08) {
+            if (regs_[NR12] & 0x08) {
                 if (ch1Volume_ < 15) ch1Volume_++;
             } else {
                 if (ch1Volume_ > 0) ch1Volume_--;
@@ -161,10 +185,10 @@ void Apu::clockEnvelope() {
         }
     }
     // Ch 2
-    if (ch2Enabled_ && (regs_[0x17] & 0x07)) {
-        if (++ch2EnvelopeTimer_ >= (regs_[0x17] & 0x07)) {
+    if (ch2Enabled_ && (regs_[NR17] & 0x07)) {
+        if (++ch2EnvelopeTimer_ >= (regs_[NR17] & 0x07)) {
             ch2EnvelopeTimer_ = 0;
-            if (regs_[0x17] & 0x08) {
+            if (regs_[NR17] & 0x08) {
                 if (ch2Volume_ < 15) ch2Volume_++;
             } else {
                 if (ch2Volume_ > 0) ch2Volume_--;
@@ -172,10 +196,10 @@ void Apu::clockEnvelope() {
         }
     }
     // Ch 4
-    if (ch4Enabled_ && (regs_[0x21] & 0x07)) {
-        if (++ch4EnvelopeTimer_ >= (regs_[0x21] & 0x07)) {
+    if (ch4Enabled_ && (regs_[NR42] & 0x07)) {
+        if (++ch4EnvelopeTimer_ >= (regs_[NR42] & 0x07)) {
             ch4EnvelopeTimer_ = 0;
-            if (regs_[0x21] & 0x08) {
+            if (regs_[NR42] & 0x08) {
                 if (ch4Volume_ < 15) ch4Volume_++;
             } else {
                 if (ch4Volume_ > 0) ch4Volume_--;
@@ -186,15 +210,15 @@ void Apu::clockEnvelope() {
 
 void Apu::clockSweep() {
     if (!ch1SweepEnabled_) return;
-    int sweepPace = (regs_[0x10] >> 4) & 0x07;
+    int sweepPace = (regs_[NR10] >> 4) & 0x07;
     if (sweepPace == 0) return;
 
     if (++ch1SweepTimer_ >= sweepPace) {
         ch1SweepTimer_ = 0;
-        int shift = regs_[0x10] & 0x07;
+        int shift = regs_[NR10] & 0x07;
         if (shift > 0) {
             int delta = ch1SweepFreq_ >> shift;
-            if (regs_[0x10] & 0x08) { // restar
+            if (regs_[NR10] & 0x08) { // restar
                 ch1SweepFreq_ -= delta;
             } else { // sumar
                 ch1SweepFreq_ += delta;
@@ -214,7 +238,7 @@ void Apu::generateSample() {
 
     // Ch 1
     if (ch1Enabled_) {
-        int duty = (regs_[0x11] >> 6) & 0x03;
+        int duty = (regs_[NR11] >> 6) & 0x03;
         int bit = DUTY_PATTERNS[duty][ch1DutyPos_];
         double sig = bit ? (ch1Volume_ / 15.0) : 0.0;
         if (nr51_ & 0x01) sampleR += sig;
@@ -223,7 +247,7 @@ void Apu::generateSample() {
 
     // Ch 2
     if (ch2Enabled_) {
-        int duty = (regs_[0x16] >> 6) & 0x03;
+        int duty = (regs_[NR16] >> 6) & 0x03;
         int bit = DUTY_PATTERNS[duty][ch2DutyPos_];
         double sig = bit ? (ch2Volume_ / 15.0) : 0.0;
         if (nr51_ & 0x02) sampleR += sig;
@@ -231,7 +255,7 @@ void Apu::generateSample() {
     }
 
     // Ch 3
-    if (ch3Enabled_ && (regs_[0x1A] & 0x80)) {
+    if (ch3Enabled_ && (regs_[NR30] & 0x80)) {
         uint8_t byte = waveRam_[ch3SampleIdx_ / 2];
         uint8_t nibble = (ch3SampleIdx_ & 1) ? (byte & 0x0F) : ((byte >> 4) & 0x0F);
         if (ch3VolumeShift_ > 0) {
@@ -312,44 +336,50 @@ void Apu::write(uint16_t address, uint8_t value) {
         case 0xFF14:
             if (value & 0x80) {
                 ch1Enabled_ = true;
-                ch1LengthTimer_ = 64 - (regs_[0x11] & 0x3F);
-                ch1Volume_ = (regs_[0x12] >> 4) & 0x0F;
+                ch1LengthTimer_ = 64 - (regs_[NR11] & 0x3F);
+                ch1Volume_ = (regs_[NR12] >> 4) & 0x0F;
                 ch1EnvelopeTimer_ = 0;
-                ch1Frequency_ = ((value & 0x07) << 8) | regs_[0x13];
+                ch1Frequency_ = ((value & 0x07) << 8) | regs_[NR13];
                 ch1SweepFreq_ = ch1Frequency_;
                 ch1SweepTimer_ = 0;
-                ch1SweepEnabled_ = ((regs_[0x10] >> 4) & 0x07) > 0 || (regs_[0x10] & 0x07) > 0;
+                ch1SweepEnabled_ = ((regs_[NR10] >> 4) & 0x07) > 0 || (regs_[NR10] & 0x07) > 0;
+                // D-APU-3: el temporizador arranca con un periodo completo,
+                // no en 0 (el primer paso de duty no es inmediato).
+                ch1Timer_ = (2048 - ch1Frequency_) * 4;
             }
             break;
         // Ch 2 Trigger
         case 0xFF19:
             if (value & 0x80) {
                 ch2Enabled_ = true;
-                ch2LengthTimer_ = 64 - (regs_[0x16] & 0x3F);
-                ch2Volume_ = (regs_[0x17] >> 4) & 0x0F;
+                ch2LengthTimer_ = 64 - (regs_[NR16] & 0x3F);
+                ch2Volume_ = (regs_[NR17] >> 4) & 0x0F;
                 ch2EnvelopeTimer_ = 0;
-                ch2Frequency_ = ((value & 0x07) << 8) | regs_[0x18];
+                ch2Frequency_ = ((value & 0x07) << 8) | regs_[NR18];
+                ch2Timer_ = (2048 - ch2Frequency_) * 4;
             }
             break;
         // Ch 3 Trigger
         case 0xFF1E:
             if (value & 0x80) {
                 ch3Enabled_ = true;
-                ch3LengthTimer_ = 256 - regs_[0x1B];
+                ch3LengthTimer_ = 256 - regs_[NR31];
                 static const int SHIFTS[4] = {0, 1, 2, 3}; // 0%, 100%, 50%, 25%
-                ch3VolumeShift_ = SHIFTS[(regs_[0x1C] >> 5) & 0x03];
-                ch3Frequency_ = ((value & 0x07) << 8) | regs_[0x1D];
+                ch3VolumeShift_ = SHIFTS[(regs_[NR32] >> 5) & 0x03];
+                ch3Frequency_ = ((value & 0x07) << 8) | regs_[NR33];
                 ch3SampleIdx_ = 0;
+                ch3Timer_ = (2048 - ch3Frequency_) * 2;
             }
             break;
         // Ch 4 Trigger
         case 0xFF23:
             if (value & 0x80) {
                 ch4Enabled_ = true;
-                ch4LengthTimer_ = 64 - (regs_[0x20] & 0x3F);
-                ch4Volume_ = (regs_[0x21] >> 4) & 0x0F;
+                ch4LengthTimer_ = 64 - (regs_[NR41] & 0x3F);
+                ch4Volume_ = (regs_[NR42] >> 4) & 0x0F;
                 ch4EnvelopeTimer_ = 0;
                 ch4Lfsr_ = 0x7FFF;
+                ch4Timer_ = ch4Period(regs_[NR43]);
             }
             break;
         case 0xFF24: nr50_ = value; break;
@@ -358,6 +388,10 @@ void Apu::write(uint16_t address, uint8_t value) {
             apuEnabled_ = (value & 0x80) != 0;
             if (!apuEnabled_) {
                 std::memset(regs_, 0, sizeof(regs_));
+                // D-APU-5: nr50_/nr51_ son miembros aparte; sin limpiarlos,
+                // al reencender generateSample usaría el volumen viejo.
+                nr50_ = 0;
+                nr51_ = 0;
                 ch1Enabled_ = false;
                 ch2Enabled_ = false;
                 ch3Enabled_ = false;

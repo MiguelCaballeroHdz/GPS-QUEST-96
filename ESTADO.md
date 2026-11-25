@@ -38,8 +38,18 @@ video del gate POCO del 20 nov. Suite C++: 180 comprobaciones, 0 fallos
   84 ms), irregulares: 55 en 150-180 s, ninguno en 120-150 s. Compatible
   con underruns sistemáticos, sin poder distinguirlo de descansos de la
   música solo con el audio.
-- Siguiente: slice 1 (APU) en la sesión del mié 25 nov 06:00; luego
-  slices 2-4, y con la emulación sólida, la spec 019.
+- **Slice 1 — APU (mié 25 nov 06:00, rama `020-slice-1-apu`, PR abierto
+  hacia `020-diag-nucleo`).** Reindexado `regs_[]` con constantes NR10..
+  NR44 (D-APU-1), LFSR a divisor * 2^(shift+4) (D-APU-2), timers a periodo
+  completo al disparar (D-APU-3), `while` en sequencer/timers (D-APU-4),
+  NR52 limpia `nr50_`/`nr51_` (D-APU-5). Medido en host: ch3 suena a 546,
+  ch4 suena (81 transiciones/s en el primer segundo), length ch1/ch2 corta
+  a 16384 ciclos, envelope a 546 a 57344, sweep con overflow apaga el ch1.
+  Suite C++: **189 comprobaciones, 0 fallos** (`test_apu` 35 -> 44).
+  Gate POCO pendiente: la música suena completa (4 canales) y afinada.
+- Siguiente: slice 2 (audio Java: margen + prioridad + medición) en la
+  sesión del vie 27 nov 06:00; luego slices 3-4, y con la emulación sólida,
+  la spec 019.
 
 ## Estado vivo
 Resumen de `memory/archivo/estado_actual-2026-11.md` + `tasks-2026-11.md`. Solo lo que sigue abierto.
