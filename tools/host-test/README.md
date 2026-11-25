@@ -19,12 +19,13 @@ Arnés de host para verificar lógica que no necesita Android ni POCO. Tiene dos
      estructural de las tablas grass/water de Gen 2, rangos, tabla corrupta y, si
      `GPSQUEST_ROM_GEN2` está definida, las cuatro tablas de Gen 2 y ruta inicial.
      En bases sin `wild_routine.cpp` (antes de la 009 slice 3), `run.sh` lo salta.
-   - `test_apu` — **35 checks** (diagnóstico del núcleo, spec 020): tasa de muestras
+   - `test_apu` — **44 checks** (spec 020, slice 1): tasa de muestras
      (738/frame), cadencia de drenaje, capacidad del anillo (4095 frames, muestras
-     tiradas sin drenar), frame sequencer (length/envelope/sweep) y los 4 canales.
-     Pincha el bug de índices `regs_[]` +0x10 con sondas (ch3/ch4 mudos, ch1/ch2
-     con registros del vecino); el slice de corrección cambia los checks a su
-     valor hardware.
+     tiradas sin drenar), frame sequencer (length/envelope/sweep) y los 4 canales
+     con sus valores hardware: length ch1/ch2 corta a 16384 ciclos, envelope
+     ch1 a 546 a 57344, sweep con overflow apaga el ch1, ch3 suena a 546,
+     ch4 suena con 81 transiciones/s, timers al disparar, `while` en
+     sequencer/timers y NR52 limpia nr50_/nr51_.
    - `test_timing` — **19 checks** (diagnóstico del núcleo, spec 020): modos PPU
      80/172/204, VBlank a 65664 ciclos, frame completo 70224 ciclos (59,73 fps),
      sin deriva en 2 frames seguidos.
@@ -41,7 +42,7 @@ Arnés de host para verificar lógica que no necesita Android ni POCO. Tiene dos
      `TOURISM`, POI por delante de terreno, enum de 8 valores alcanzables, `parse()` conserva
      nodos y vías y descarta lo que no tiene tipo.
 
-**Total C++: 180 checks** (34 + 18 + 51 + 23 + 35 + 19; sin `test_wildtable`,
+**Total C++: 189 checks** (34 + 18 + 51 + 23 + 44 + 19; sin `test_wildtable`,
 que vive en el PR #4 con 71 checks).
 Con `GPSQUEST_ROM_GEN2` definida, `test_wildtable` sube y el total también.
 

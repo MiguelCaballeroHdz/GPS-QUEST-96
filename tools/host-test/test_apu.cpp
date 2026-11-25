@@ -1,25 +1,29 @@
-// Host test de la APU (diagnóstico del núcleo, spec 020).
+// Host test de la APU (diagnóstico del núcleo, spec 020; slice 1: fix).
 // Mide el comportamiento real de `core/apu.cpp` con la API pública
 // (step/write/read/readSamples), sin Android ni POCO.
 //
-// Lo que pincha este test:
+// Lo que exige este test (valores hardware):
 //  - Tasa de producción de muestras: 1 frame GB (70224 ciclos) = 738
 //    muestras estéreo @ 44100 Hz (70224 / 95,109).
 //  - Cadencia de drenaje: si Java drena 1 frame por frame no se pierde nada.
 //  - Capacidad del anillo: 4095 frames estéreo (~93 ms); sin drenar, las
 //    muestras que sobran se TIRAN en silencio (generateSample descarta).
-//  - HALLAZGO (diag 020): la lógica de la APU lee regs_[] con índices
-//    +0x10 (p. ej. regs_[0x14] en vez de regs_[0x04]): write()/read()
-//    guardan en address-0xFF10, pero length/envelope/sweep/duty/volumen
-//    leen el registro de 0x10 más arriba. Consecuencia medida: ch3 y ch4
-//    MUDOS siempre, ch1/ch2 con tono/volumen/envelope del canal vecino.
-//    Cada bloque pincha el bug y lo confirma con una SONDA que escribe el
-//    registro que el código lee de verdad; el slice de corrección cambia
-//    los índices y estos checks pasarán a su valor hardware.
-//  - Ruido (ch4): además del +0x10, el periodo del LFSR es divisor <<
-//    shift, 16x más rápido que el hardware (divisor * 2^(shift+4));
-//    no es medible por muestras mientras el canal es mudo, se medirá
-//    tras el fix (objetivo ~128 transiciones/s con shift=7, divisor 8).
+//  - Reindexado (D-APU-1, slice 1): length/envelope/sweep/duty/volumen/DAC
+//    leen NR10..NR44 con constantes con nombre, no regs_[0x10..0x24].
+//    Length del ch1/ch2 corta en el paso 2 (16384 ciclos) solo con el
+//    length-enable de NR14/NR19; envelope del ch1 sube a 546 en el paso 7
+//    (57344 ciclos); sweep con overflow apaga el ch1 en el paso 2; ch3
+//    (wave) suena con su nibble (546 a volumen 100%); ch4 (ruido) suena
+//    con volumen de NR42.
+//  - Ruido (D-APU-2, slice 1): periodo del LFSR divisor * 2^(shift+4):
+//    con shift=7 y divisor 8, 256 pasos/s y 81 transiciones en el primer
+//    segundo desde la semilla 0x7FFF (antes 16x más rápido: ~2048/s).
+//  - Timers al disparar (D-APU-3, slice 1): el primer paso de duty/wave/
+//    LFSR ocurre tras un periodo completo, no en el primer step().
+//  - Sequencer y timers con `while` (D-APU-4, slice 1): un solo
+//    step(16384) avanza dos pasos de sequencer (length corta igual).
+//  - NR52 (D-APU-5, slice 1): al apagar, nr50_/nr51_ se limpian; al
+//    reencender el volumen maestro es 0 hasta reescribir NR50.
 //  - Frame sequencer: length (paso 2 = 16384 ciclos), envelope (paso 7 =
 //    57344 ciclos) y sweep (paso 2) con sus cadencias hardware.
 //
@@ -45,11 +49,9 @@ static int checks = 0;
 } while (0)
 
 // Avanza N ciclos en pasos de 4, como el bucle real (Cpu::stepAndSync
-// pasa 4-24 ciclos por llamada). OBLIGATORIO para el sequencer: el frame
-// sequencer y los temporizadores de canal usan `if` (no `while`): un solo
-// step(N) grande solo avanza UN paso de sequencer y UN paso de duty por
-// llamada, y las cadencias medidas saldrían mal. La producción de muestras
-// sí usa `while` y es independiente del tamaño del paso.
+// pasa 4-24 ciclos por llamada). La producción de muestras usa `while`
+// y es independiente del tamaño del paso; el sequencer y los timers de
+// canal también (D-APU-4), pero el paso de 4 sigue siendo el real.
 static void stepCycles(Apu& apu, int cycles) {
     while (cycles > 0) {
         int chunk = cycles < 4 ? cycles : 4;
@@ -142,177 +144,191 @@ int main() {
     }
 
     // ── Frame sequencer: length del ch1 en el paso 2 (16384 ciclos) ────
-    // BUG (diag 020): clockLength() lee el length-enable del ch1 en
-    // regs_[0x14] (slot de NR50, 0xFF24) en vez de regs_[0x04] (NR14).
-    // Sin escribir NR50, el length NUNCA corta el canal. Con NR50=0xC0
-    // (bit 6), sí corta: eso prueba que el enable se lee del registro
-    // equivocado (+0x10). En juegos reales NR50 suele ser 0x77 (bit 6 = 1),
-    // así que el length del ch1 "funciona por accidente".
+    // Con el fix (D-APU-1), clockLength() lee el length-enable en NR14
+    // (regs_[0x04]). Length load 63 -> timer 1: el tick del paso 2 lo
+    // apaga. Sin length-enable, el canal sigue sonando.
     {
         Apu apu;
-        apu.write(0xFF11, 0xBF); // duty 50%, length load 63 (lo ignora: lee NR42)
+        apu.write(0xFF11, 0xBF); // duty 50%, length load 63
         apu.write(0xFF12, 0xF0); // vol 15, envelope off
         apu.write(0xFF13, 0x00);
         apu.write(0xFF14, 0xC0); // trigger + length enable, freq 0
         CHECK((apu.read(0xFF26) & 0x01) != 0);
-        stepCycles(apu, 16384); // paso 2 -> tick de length (si el enable se leyera)
-        CHECK((apu.read(0xFF26) & 0x01) != 0); // HOY: sigue on (bug)
-        std::printf("length ch1: tras 16384 ciclos sigue on (enable leido "
-                    "de NR50, no de NR14)\n");
+        stepCycles(apu, 16383);
+        CHECK((apu.read(0xFF26) & 0x01) != 0); // antes del paso 2: on
+        stepCycles(apu, 1); // 16384: paso 2 -> tick -> timer 1->0 -> off
+        CHECK((apu.read(0xFF26) & 0x01) == 0);
+        std::printf("length ch1: off a 16384 ciclos (enable leido de NR14)\n");
     }
     {
         Apu apu;
-        apu.write(0xFF24, 0xC0); // SONDA: NR50 con bit 6 (lo que lee el bug)
-        apu.write(0xFF21, 0x3F); // SONDA: NR42 como length load (timer 1)
         apu.write(0xFF11, 0xBF);
         apu.write(0xFF12, 0xF0);
         apu.write(0xFF13, 0x00);
-        apu.write(0xFF14, 0xC0); // trigger + length enable, freq 0
-        stepCycles(apu, 16383);
+        apu.write(0xFF14, 0x80); // trigger SIN length enable
         CHECK((apu.read(0xFF26) & 0x01) != 0);
-        stepCycles(apu, 1); // 16384: paso 2 -> tick -> timer 1->0 -> off
-        CHECK((apu.read(0xFF26) & 0x01) == 0); // la sonda confirma el +0x10
+        stepCycles(apu, 16384);
+        CHECK((apu.read(0xFF26) & 0x01) != 0); // sin enable: sigue on
+    }
+
+    // ── Length del ch2 en el paso 2 (mismo reindexado, NR19) ───────────
+    {
+        Apu apu;
+        apu.write(0xFF16, 0xBF); // duty 50%, length load 63
+        apu.write(0xFF17, 0xF0);
+        apu.write(0xFF18, 0x00);
+        apu.write(0xFF19, 0xC0); // trigger + length enable
+        CHECK((apu.read(0xFF26) & 0x02) != 0);
+        stepCycles(apu, 16383);
+        CHECK((apu.read(0xFF26) & 0x02) != 0);
+        stepCycles(apu, 1); // 16384: paso 2 -> off
+        CHECK((apu.read(0xFF26) & 0x02) == 0);
     }
 
     // ── Frame sequencer: envelope del ch1 en el paso 7 (57344 ciclos) ──
-    // BUG (diag 020): clockEnvelope() y el trigger del ch1 leen el
-    // envelope en regs_[0x12] (slot de NR43, 0xFF22) en vez de regs_[0x02]
-    // (NR12). Sin escribir NR43, el periodo es 0 y el volumen no se mueve.
-    // La sonda escribe NR43=0x09 (subir, periodo 1) y el tick sí llega.
+    // Con el fix, el envelope se lee de NR12: vol 0, subir, periodo 1.
+    // El tick del paso 7 lo sube a 1 -> maxL 546 (1/15 * 0,25 * 32767).
+    // El temporizador de duty arranca con un periodo completo (D-APU-3):
+    // a 57344 ciclos dutyPos es 7 y el patrón 50% ahí es 1.
     {
         Apu apu;
         apu.write(0xFF11, 0x80); // duty 50%, length 64 (sin length enable)
-        apu.write(0xFF12, 0x09); // vol 0, subir, periodo 1 (no lo lee nadie)
+        apu.write(0xFF12, 0x09); // vol 0, subir, periodo 1
         apu.write(0xFF13, 0x00);
         apu.write(0xFF14, 0x80); // trigger, freq 0
         stepCycles(apu, 57343);
         int n0 = drain(apu, buf, 20000);
-        CHECK(maxL(buf, n0) == 0); // vol 0: silencio
+        int m0 = maxL(buf, n0); // vol 0: silencio (capturar antes del 2º drenaje)
+        CHECK(m0 == 0);
         stepCycles(apu, 200); // cruza 57344: paso 7 -> tick de envelope
         int n1 = drain(apu, buf, 20000);
-        CHECK(maxL(buf, n1) == 0); // HOY: sigue 0 (envelope leído de NR43)
-        std::printf("envelope ch1: maxL antes=%d, despues=%d "
-                    "(esperado 0 y 546; hoy 0 y 0)\n",
-                    maxL(buf, n0), maxL(buf, n1));
-    }
-    {
-        Apu apu;
-        apu.write(0xFF22, 0x09); // SONDA: NR43 con subir + periodo 1
-        apu.write(0xFF21, 0x80); // SONDA: NR42 como duty (50%: bit 1 en pos 0)
-        apu.write(0xFF11, 0x80);
-        apu.write(0xFF12, 0x09);
-        apu.write(0xFF13, 0x00);
-        apu.write(0xFF14, 0x80);
-        stepCycles(apu, 57343);
-        CHECK(maxL(buf, drain(apu, buf, 20000)) == 0);
-        stepCycles(apu, 200); // paso 7 -> tick -> vol 0->1
-        int n1 = drain(apu, buf, 20000);
-        // vol 1/15 * 0,25 * 32767 = 546. El temporizador de duty arranca
-        // en 0 (primer paso inmediato): a 57344 ciclos dutyPos vuelve a 0
-        // y el patrón 50% ahí es 1.
-        CHECK(maxL(buf, n1) == 546); // la sonda confirma el +0x10
+        CHECK(maxL(buf, n1) == 546);
+        std::printf("envelope ch1: maxL antes=%d, despues=%d (esperado 0 y 546)\n",
+                    m0, maxL(buf, n1));
     }
 
     // ── Sweep: overflow en el primer tick apaga el ch1 ─────────────────
-    // BUG (diag 020): clockSweep() lee pace/shift en regs_[0x10] (slot de
-    // NR41, 0xFF20) en vez de regs_[0x00] (NR10). Sin escribir NR41, el
-    // sweep está apagado y el ch1 no se apaga nunca. La sonda escribe
-    // NR41=0x11 (pace 1, sumar, shift 1) y el overflow sí lo apaga.
+    // Con el fix, pace/shift se leen de NR10: pace 1, sumar, shift 1,
+    // freq 2047 -> 2047 + 1023 > 2047 en el tick del paso 2.
     {
         Apu apu;
-        apu.write(0xFF10, 0x11); // pace 1, sumar, shift 1 (no lo lee nadie)
+        apu.write(0xFF10, 0x11); // pace 1, sumar, shift 1
         apu.write(0xFF11, 0x80);
         apu.write(0xFF12, 0xF0);
-        apu.write(0xFF13, 0xFF); // byte bajo de freq (tampoco lo lee: usa NR44)
-        apu.write(0xFF14, 0x87); // trigger, freq alta 7
+        apu.write(0xFF13, 0xFF); // byte bajo de freq
+        apu.write(0xFF14, 0x87); // trigger, freq alta 7 -> freq 2047
         CHECK((apu.read(0xFF26) & 0x01) != 0);
-        stepCycles(apu, 16384); // paso 2 -> tick de sweep (si pace > 0)
-        CHECK((apu.read(0xFF26) & 0x01) != 0); // HOY: sigue on (bug)
-        std::printf("sweep ch1: tras 16384 ciclos sigue on (pace/shift "
-                    "leidos de NR41, no de NR10)\n");
-    }
-    {
-        Apu apu;
-        apu.write(0xFF20, 0x11); // SONDA: NR41 con pace 1, sumar, shift 1
-        apu.write(0xFF23, 0xFF); // SONDA: NR44 como byte bajo de freq (2047)
-        apu.write(0xFF10, 0x11);
-        apu.write(0xFF11, 0x80);
-        apu.write(0xFF12, 0xF0);
-        apu.write(0xFF13, 0xFF);
-        apu.write(0xFF14, 0x87); // trigger, freq 2047
         stepCycles(apu, 16383);
         CHECK((apu.read(0xFF26) & 0x01) != 0);
-        stepCycles(apu, 1); // 16384: paso 2 -> sweep: 2047+1023 > 2047 -> off
-        CHECK((apu.read(0xFF26) & 0x01) == 0); // la sonda confirma el +0x10
+        stepCycles(apu, 1); // 16384: paso 2 -> sweep: overflow -> off
+        CHECK((apu.read(0xFF26) & 0x01) == 0);
+        std::printf("sweep ch1: off a 16384 ciclos (pace/shift leidos de NR10)\n");
     }
 
     // ── Canal 3 (wave): nibble de la Wave RAM con volumen 100% ─────────
-    // BUG (diag 020): generateSample() lee el DAC en regs_[0x1A] (slot de
-    // 0xFF2A, sin uso) en vez de regs_[0x0A] (NR30), y el trigger lee el
-    // volumen en regs_[0x1C] (slot de 0xFF2C, sin uso) en vez de regs_[0x0C]
-    // (NR32). Sin sondas, el ch3 NUNCA suena. Las sondas escriben 0xFF2A y
-    // 0xFF2C y el canal suena: eso prueba el +0x10.
+    // Con el fix, el DAC se lee de NR30 y el volumen de NR32.
+    // Byte 0 = 0x10: nibble alto 1 (idx 0 -> 546), nibble bajo 0 (idx 1).
+    // El temporizador de wave arranca con un periodo completo (D-APU-3):
+    // idx 0 dura 4096 ciclos, no 4.
     {
         Apu apu;
         apu.write(0xFF30, 0x10); // byte 0: nibble alto 1, bajo 0
         apu.write(0xFF31, 0x00);
-        apu.write(0xFF1A, 0x80); // DAC on (no lo lee nadie)
+        apu.write(0xFF1A, 0x80); // DAC on
         apu.write(0xFF1B, 0x00); // length 256
-        apu.write(0xFF1C, 0x20); // vol 100% (tampoco lo lee)
+        apu.write(0xFF1C, 0x20); // vol 100%
         apu.write(0xFF1D, 0x00);
         apu.write(0xFF1E, 0x80); // trigger, freq 0
-        stepCycles(apu, 8192);
-        int n = drain(apu, buf, 20000);
-        CHECK(maxL(buf, n) == 0); // HOY: ch3 mudo (DAC leído de 0xFF2A)
-        std::printf("wave ch3: maxL=%d (esperado 546; hoy 0)\n",
-                    maxL(buf, n));
-    }
-    {
-        Apu apu;
-        apu.write(0xFF2A, 0x80); // SONDA: slot que lee el DAC
-        apu.write(0xFF2C, 0x20); // SONDA: slot que lee el volumen (100%)
-        apu.write(0xFF30, 0x11); // byte 0: nibbles 1,1 (idx 0 y 1 -> 546)
-        apu.write(0xFF31, 0x00); // byte 1: nibbles 0,0 (idx 2 y 3 -> 0)
-        apu.write(0xFF1A, 0x80);
-        apu.write(0xFF1B, 0x00);
-        apu.write(0xFF1C, 0x20);
-        apu.write(0xFF1D, 0x00);
-        apu.write(0xFF1E, 0x80);
-        // El temporizador de wave arranca en 0 (primer paso inmediato):
-        // idx 0 dura 4 ciclos (< 1 muestra), idx 1 dura hasta 4100.
-        stepCycles(apu, 8192); // idx 1 (546) y luego idx 2 (0)
+        stepCycles(apu, 8192); // idx 0 (546) y luego idx 1 (0)
         int n = drain(apu, buf, 20000);
         CHECK(maxL(buf, n) == 546); // 1/15 * 0,25 * 32767
         CHECK(countTransitions(buf, n) >= 1); // hay cambio 546 -> 0
+        std::printf("wave ch3: maxL=%d (esperado 546)\n", maxL(buf, n));
     }
 
-    // ── Ruido (ch4): volumen siempre 0 -> canal mudo ───────────────────
-    // BUG (diag 020): el trigger del ch4 lee el volumen en regs_[0x21]
-    // (slot de 0xFF31, Wave RAM) en vez de regs_[0x11] (NR42). Los slots
-    // 0x20-0x2F de regs_ NO se pueden escribir jamás (0xFF30-0xFF3F van a
-    // waveRam_), así que ch4Volume_ es 0 siempre: el ruido NO suena nunca,
-    // escriba lo que escriba el juego. No hay sonda que lo despierte; solo
-    // el reindexado del fix lo arregla.
-    // BUG 2 (solo lectura de código, no medible mientras el canal es mudo):
-    // el periodo del LFSR es divisor << shift, 16x más rápido que el
-    // hardware (divisor * 2^(shift+4)); se medirá tras el fix.
+    // ── Ruido (ch4): volumen de NR42 y periodo hardware del LFSR ───────
+    // Con el fix, el trigger lee el volumen de NR42 y el periodo es
+    // divisor * 2^(shift+4) (D-APU-2): shift 7, divisor 8 -> periodo
+    // 16384 ciclos, 256 pasos/s. En el primer segundo desde la semilla
+    // 0x7FFF hay exactamente 81 transiciones (simulado; la media a largo
+    // plazo es ~128/s). Antes el canal era mudo (volumen leído de Wave
+    // RAM) y el LFSR iba 16x rápido (~2048 transiciones/s).
     {
         Apu apu;
         apu.write(0xFF20, 0x00); // length 64
-        apu.write(0xFF21, 0xF0); // vol 15, envelope off (no lo lee nadie)
-        apu.write(0xFF22, 0x70); // shift 7, divisor 8 (tampoco lo lee)
+        apu.write(0xFF21, 0xF0); // vol 15, envelope off
+        apu.write(0xFF22, 0x70); // shift 7, divisor 8
         apu.write(0xFF23, 0x80); // trigger
         int nonzero = 0;
-        for (int k = 0; k < 10; k++) {
-            stepCycles(apu, 419430); // ~0,1 s por pasada
+        int transitions = 0;
+        for (int k = 0; k < 20; k++) {
+            stepCycles(apu, 209715); // ~0,05 s por pasada, sin desbordar
             int n = drain(apu, buf, 20000);
             for (int i = 0; i < n; i += 2) {
                 if (buf[i] != 0) ++nonzero;
             }
+            transitions += countTransitions(buf, n);
         }
-        CHECK(nonzero == 0); // HOY: ch4 mudo (vol leído de Wave RAM)
-        std::printf("ruido ch4: %d muestras distintas de cero en 1 s "
-                    "(esperado >0; hoy 0)\n", nonzero);
+        CHECK(nonzero > 0); // el ruido suena
+        // 81 transiciones exactas en el primer segundo desde 0x7FFF; el
+        // rango 50..210 distingue el periodo hardware del bug 16x
+        // (~2048/s) sin ser frágil al muestreo.
+        CHECK(transitions >= 50 && transitions <= 210);
+        std::printf("ruido ch4: %d muestras distintas de cero, %d transiciones "
+                    "en 1 s (esperado >0 y 81)\n", nonzero, transitions);
+    }
+
+    // ── D-APU-4: un solo step() grande avanza el sequencer ─────────────
+    // Con `while`, step(16384) en UNA llamada hace dos pasos de
+    // sequencer (0->1->2) y el length corta igual que con pasos de 4.
+    {
+        Apu apu;
+        apu.write(0xFF11, 0xBF);
+        apu.write(0xFF12, 0xF0);
+        apu.write(0xFF13, 0x00);
+        apu.write(0xFF14, 0xC0); // trigger + length enable, timer 1
+        CHECK((apu.read(0xFF26) & 0x01) != 0);
+        apu.step(16384); // una sola llamada
+        CHECK((apu.read(0xFF26) & 0x01) == 0);
+    }
+
+    // ── D-APU-3: el temporizador de duty arranca con un periodo ────────
+    // Freq 0 -> periodo 8192 ciclos. Duty 50%: pos 0 = 1 (8191 en la
+    // primera ventana), pos 1 = 0 (silencio en la segunda).
+    {
+        Apu apu;
+        apu.write(0xFF11, 0x80); // duty 50%
+        apu.write(0xFF12, 0xF0); // vol 15
+        apu.write(0xFF13, 0x00);
+        apu.write(0xFF14, 0x80); // trigger, freq 0
+        stepCycles(apu, 8192);
+        CHECK(maxL(buf, drain(apu, buf, 20000)) == 8191); // pos 0
+        stepCycles(apu, 8192);
+        CHECK(maxL(buf, drain(apu, buf, 20000)) == 0); // pos 1
+    }
+
+    // ── D-APU-5: NR52 apaga y limpia nr50_/nr51_ ──────────────────────
+    // Tras apagar y reencender, el volumen maestro es 0 hasta reescribir
+    // NR50: el ch1 dispara pero no suena. Sin el fix, nr50_ conservaría
+    // 0x77 y sonaría a 8191.
+    {
+        Apu apu;
+        apu.write(0xFF11, 0x80);
+        apu.write(0xFF12, 0xF0);
+        apu.write(0xFF13, 0x00);
+        apu.write(0xFF14, 0x80);
+        stepCycles(apu, 4096);
+        CHECK(maxL(buf, drain(apu, buf, 20000)) > 0); // suena (NR50=0x77)
+        apu.write(0xFF26, 0x00); // apagar
+        apu.write(0xFF26, 0x80); // encender
+        CHECK(apu.read(0xFF26) == 0xF0);
+        CHECK(apu.read(0xFF24) == 0x00); // NR50 leído como 0
+        apu.write(0xFF11, 0x80);
+        apu.write(0xFF12, 0xF0);
+        apu.write(0xFF13, 0x00);
+        apu.write(0xFF14, 0x80);
+        stepCycles(apu, 4096);
+        CHECK(maxL(buf, drain(apu, buf, 20000)) == 0); // maestro a 0
     }
 
     std::printf("test_apu: %d checks, %d failures\n", checks, failures);

@@ -300,13 +300,15 @@ la emu pierde deuda y la APU deja de producir). El gate POCO del slice
 
 ## Plan de slices de corrección (uno por sesión)
 
-1. **Slice 1 — APU: reindexado + LFSR + timers.** D-APU-1 (reindexar
-   `regs_[]` con constantes NR10..NR44), D-APU-2 (LFSR ×16), D-APU-3
-   (timers a periodo al disparar), D-APU-4 (`while` en sequencer/timers),
-   D-APU-5 (NR52 limpia `nr50_`/`nr51_`). Host tests: `test_apu.cpp`
-   pasa de pinchar el bug a exigir el valor hardware (length off a
-   16384, envelope 546 a 57344, sweep off, ch3 546, ch4 >0 muestras,
-   transiciones de ruido ~128/s). Gate POCO: la música suena completa
+1. **Slice 1 — APU: reindexado + LFSR + timers. HECHO mié 25 nov 06:00
+   (rama `020-slice-1-apu`, PR hacia `020-diag-nucleo`).** D-APU-1
+   (reindexar `regs_[]` con constantes NR10..NR44), D-APU-2 (LFSR ×16),
+   D-APU-3 (timers a periodo al disparar), D-APU-4 (`while` en sequencer/
+   timers), D-APU-5 (NR52 limpia `nr50_`/`nr51_`). Host tests: `test_apu`
+   35 -> 44 comprobaciones, suite C++ 180 -> 189, 0 fallos (length off a
+   16384, envelope 546 a 57344, sweep off, ch3 546, ch4 >0 muestras con 81
+   transiciones/s en el primer segundo desde 0x7FFF — simulado, media a
+   largo plazo ~128/s). Gate POCO pendiente: la música suena completa
    (4 canales) y afinada.
 2. **Slice 2 — Audio Java: margen + prioridad + medición.** D-AUD-1,
    D-AUD-2, D-AUD-3. AudioTrack mayor, `THREAD_PRIORITY_AUDIO`, contador
