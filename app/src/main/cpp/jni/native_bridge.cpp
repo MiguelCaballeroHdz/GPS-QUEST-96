@@ -268,6 +268,21 @@ Java_com_gpsquest96_emulator_EmulatorBridge_nativeReadAudioSamples(
     return count;
 }
 
+/**
+ * Muestras estéreo tiradas por la APU desde el arranque/reset
+ * (D-AUD-2, spec 020 slice 2). 0 si no hay emulador cargado.
+ */
+JNIEXPORT jint JNICALL
+Java_com_gpsquest96_emulator_EmulatorBridge_nativeGetAudioDroppedSamples(
+        JNIEnv* /* env */,
+        jobject /* thiz */) {
+
+    if (g_mmu == nullptr) {
+        return 0;
+    }
+    return static_cast<jint>(g_mmu->getApu().getDroppedSamples());
+}
+
 JNIEXPORT jint JNICALL
 Java_com_gpsquest96_emulator_EmulatorBridge_nativeReadSramRaw(
         JNIEnv* /* env */,

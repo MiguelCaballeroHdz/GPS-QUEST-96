@@ -258,9 +258,10 @@ public class MainActivity extends Activity implements SensorEventListener {
                     dbgDtNs += dt;
                     if (dbgTicks % 512 == 0) {
                         Log.d("GameEngine", String.format(
-                                "PUMP012 ticks=%d frames=%d dt_medio_ms=%.1f fps=%.1f",
+                                "PUMP012 ticks=%d frames=%d dt_medio_ms=%.1f fps=%.1f %s",
                                 dbgTicks, dbgFrames, dbgDtNs / 1.0e6 / dbgTicks,
-                                dbgFrames * 1000.0 / (dbgDtNs / 1.0e6)));
+                                dbgFrames * 1000.0 / (dbgDtNs / 1.0e6),
+                                gameEngine.getAudioStatsLine()));
                         dbgFrames = 0;
                         dbgDtNs = 0;
                     }

@@ -6,8 +6,9 @@
 //  - Tasa de producción de muestras: 1 frame GB (70224 ciclos) = 738
 //    muestras estéreo @ 44100 Hz (70224 / 95,109).
 //  - Cadencia de drenaje: si Java drena 1 frame por frame no se pierde nada.
-//  - Capacidad del anillo: 4095 frames estéreo (~93 ms); sin drenar, las
-//    muestras que sobran se TIRAN en silencio (generateSample descarta).
+//  - Capacidad del anillo: 8191 frames estéreo (~186 ms); sin drenar, las
+//    muestras que sobran se TIRAN, pero ahora se cuentan
+//    (getDroppedSamples, D-AUD-2 slice 2) en vez de perderse en silencio.
 //  - Reindexado (D-APU-1, slice 1): length/envelope/sweep/duty/volumen/DAC
 //    leen NR10..NR44 con constantes con nombre, no regs_[0x10..0x24].
 //    Length del ch1/ch2 corta en el paso 2 (16384 ciclos) solo con el
@@ -129,15 +130,32 @@ int main() {
         CHECK(total == 7383 * 2);
     }
 
-    // ── Anillo: 6 frames sin drenar desbordan y tiran muestras ─────────
+    // ── Anillo: 12 frames sin drenar desbordan y tiran muestras ────────
+    // Capacidad real: 8191 frames (un hueco distingue lleno de vacío).
+    // D-AUD-2 (slice 2): el anillo es el doble que antes (4096 -> 8192)
+    // y las muestras tiradas se CUENTAN (getDroppedSamples), no se
+    // descartan en silencio.
     {
         Apu apu;
-        for (int f = 0; f < 6; f++) apu.step(70224); // 6*738 = 4428 frames
+        CHECK(apu.getDroppedSamples() == 0); // recién creada: cero tiradas
+        // Referencia sin pérdidas: mismos 12 frames drenando frame a frame.
+        Apu ref;
+        int totalRef = 0;
+        for (int f = 0; f < 12; f++) {
+            ref.step(70224);
+            totalRef += drain(ref, buf, 20000);
+        }
+        CHECK(ref.getDroppedSamples() == 0);
+        for (int f = 0; f < 12; f++) apu.step(70224); // 12 frames sin drenar
         int n = drain(apu, buf, 20000);
-        // Capacidad real: 4095 frames (un hueco distingue lleno de vacío).
-        CHECK(n == 4095 * 2);
-        std::printf("anillo: 6 frames sin drenar -> %d int16 "
-                    "(4428 producidos, 333 tirados)\n", n);
+        CHECK(n == 8191 * 2);
+        int dropped = apu.getDroppedSamples();
+        CHECK(dropped > 0);
+        // Conservadas + tiradas = producidas (sin pérdidas en la cuenta).
+        CHECK(n / 2 + dropped == totalRef / 2);
+        std::printf("anillo: 12 frames sin drenar -> %d int16 "
+                    "(%d producidos, %d tirados)\n",
+                    n, totalRef / 2, dropped);
         // Tras drenar, el anillo vuelve a aceptar un frame entero.
         apu.step(70224);
         CHECK(drain(apu, buf, 20000) == 738 * 2);
