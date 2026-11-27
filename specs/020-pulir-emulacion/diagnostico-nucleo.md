@@ -310,11 +310,22 @@ la emu pierde deuda y la APU deja de producir). El gate POCO del slice
    transiciones/s en el primer segundo desde 0x7FFF — simulado, media a
    largo plazo ~128/s). Gate POCO pendiente: la música suena completa
    (4 canales) y afinada.
-2. **Slice 2 — Audio Java: margen + prioridad + medición.** D-AUD-1,
-   D-AUD-2, D-AUD-3. AudioTrack mayor, `THREAD_PRIORITY_AUDIO`, contador
-   de underruns y de muestras tiradas, `join` en stop, retorno de
-   `write()` comprobado. Gate POCO: sin cortes en 5 min de juego con el
-   video grabado (silencedetect sin rachas regulares).
+2. **Slice 2 — Audio Java: margen + prioridad + medición. HECHO vie 27 nov 06:00
+   (rama `020-slice-2-audio-java`, PR hacia `020-slice-1-apu`).** D-AUD-1
+   (AudioTrack 4x el mínimo con suelo 32 KB ≈ 186 ms, antes ≈ 46 ms;
+   `THREAD_PRIORITY_AUDIO`; contador de underruns + log AUD012 cada 5 s;
+   sueño de 2 ms en vez de 5 ms a ciegas cuando el anillo está vacío),
+   D-AUD-2 (anillo APU 4096 -> 8192 frames ≈ 186 ms, índices atómicos
+   acquire/release, muestras tiradas CONTADAS con `getDroppedSamples()`
+   y expuestas a Java por JNI), D-AUD-3 (`join(2 s)` en `stopAudioThread`,
+   retorno de `write()` comprobado y contado). La línea PUMP012 ahora
+   lleva los contadores de audio junto al FPS real. Host tests:
+   `test_apu` 44 -> 48 comprobaciones (anillo 8191 frames, 12 frames sin
+   drenar tiran y la cuenta cuadra: conservadas + tiradas = producidas),
+   suite C++ 189 -> 193, 0 fallos; Java nuevo `AudioStatsHostTest`
+   (deltas, retrocesos, intervalo de log). Gate POCO pendiente: 5 min de
+   juego sin cortes (silencedetect sin rachas regulares) y AUD012 con
+   underruns en 0.
 3. **Slice 3 — Video: publicar por triple búfer + vsync.** D-VID-1
    (GL lee el slot de `presentIndex_`), D-VID-2 (Choreographer o señal
    de frame listo; sacar `refreshAtlasSnapshot()` del tick de emulación).

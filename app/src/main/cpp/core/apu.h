@@ -1,6 +1,7 @@
 #ifndef GPSQUEST96_APU_H
 #define GPSQUEST96_APU_H
 
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <vector>
@@ -20,7 +21,11 @@ namespace gpsquest96 {
 class Apu {
 public:
     static constexpr int SAMPLE_RATE = 44100;
-    static constexpr int BUFFER_SIZE = 4096;
+    // Anillo de muestras estéreo: 8192 frames (~186 ms @ 59,73 fps).
+    // Spec 020 slice 2 (D-AUD-2): el doble que antes (4096) para que una
+    // ráfaga de catch-up (3 frames/tick) no tire muestras mientras el
+    // hilo de audio drena; el colchón grande vive en el AudioTrack, no aquí.
+    static constexpr int BUFFER_SIZE = 8192;
 
     Apu();
     ~Apu();
@@ -39,6 +44,15 @@ public:
 
     /** Extrae muestras PCM estéreo comprimidas en int16_t [L, R, L, R...] */
     int readSamples(int16_t* dst, int maxSamples);
+
+    /**
+     * Muestras estéreo tiradas desde el arranque/reset porque el anillo
+     * estaba lleno (D-AUD-2, spec 020 slice 2). Antes se descartaban en
+     * silencio; ahora se cuentan para el log de audio de Java.
+     */
+    int getDroppedSamples() const {
+        return droppedSamples_.load(std::memory_order_relaxed);
+    }
 
 private:
     // Registros E/S APU (0xFF10..0xFF3F)
@@ -94,8 +108,15 @@ private:
     // Generador de muestras PCM
     double sampleCycleAccumulator_;
     int16_t sampleBuffer_[BUFFER_SIZE * 2];
-    int sampleReadIdx_;
-    int sampleWriteIdx_;
+    // Índices del anillo: los escribe el hilo de emulación (write) y los
+    // lee el hilo de audio (read). Atómicos con acquire/release (D-AUD-2):
+    // el índice publicado después de escribir la muestra, y el lector lo
+    // ve antes de leerla; en ARM64 un int plano podía leerse a medias.
+    std::atomic<int> sampleReadIdx_;
+    std::atomic<int> sampleWriteIdx_;
+    // Muestras estéreo tiradas por anillo lleno (solo las cuenta el hilo
+    // de emulación; las lee el hilo de audio para el log).
+    std::atomic<int> droppedSamples_;
 
     void clockFrameSequencer();
     void clockLength();

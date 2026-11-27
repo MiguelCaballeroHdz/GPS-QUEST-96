@@ -158,6 +158,20 @@ public class EmulatorBridge {
         }
     }
 
+    public native int nativeGetAudioDroppedSamples();
+
+    /**
+     * Muestras estéreo tiradas por la APU desde el arranque/reset porque
+     * su anillo estaba lleno (D-AUD-2, spec 020 slice 2).
+     */
+    public int getAudioDroppedSamples() {
+        try {
+            return nativeGetAudioDroppedSamples();
+        } catch (Throwable t) {
+            return 0;
+        }
+    }
+
     /** Tipos de tabla de encuentro (spec 009). */
     public static final int WILD_KIND_AUTO = 0;
     public static final int WILD_KIND_GRASS = 1;

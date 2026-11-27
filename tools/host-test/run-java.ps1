@@ -50,6 +50,7 @@ $sources = @($stubs) + @(
     (Join-Path $root "app\src\main\java\com\gpsquest96\avatar\AvatarSprites.java"),
     (Join-Path $root "app\src\main\java\com\gpsquest96\render\TileAtlas.java"),
     (Join-Path $root "app\src\main\java\com\gpsquest96\emulator\core\EmulationPipeline.java"),
+    (Join-Path $root "app\src\main\java\com\gpsquest96\emulator\AudioStats.java"),
     (Join-Path $PSScriptRoot "java\test\hosttest\PuebloHostTest.java"),
     (Join-Path $PSScriptRoot "java\test\hosttest\GeofenceHostTest.java"),
     (Join-Path $PSScriptRoot "java\test\com\gpsquest96\gps\OsmClassifyHostTest.java"),
@@ -60,7 +61,8 @@ $sources = @($stubs) + @(
     (Join-Path $PSScriptRoot "java\test\hosttest\RouteBundleHostTest.java"),
     (Join-Path $PSScriptRoot "java\test\hosttest\IllustratedMapHostTest.java"),
     (Join-Path $PSScriptRoot "java\test\hosttest\SpriteExtractorHostTest.java"),
-    (Join-Path $PSScriptRoot "java\test\hosttest\AvatarSpritesHostTest.java")
+    (Join-Path $PSScriptRoot "java\test\hosttest\AvatarSpritesHostTest.java"),
+    (Join-Path $PSScriptRoot "java\test\hosttest\AudioStatsHostTest.java")
 )
 
 & $javac -encoding UTF-8 -cp $jsonJar -d $out $sources
@@ -118,6 +120,11 @@ if ($code -eq 0) {
 
 if ($code -eq 0) {
     & $java -cp "$out;$jsonJar" hosttest.AvatarSpritesHostTest
+    $code = $LASTEXITCODE
+}
+
+if ($code -eq 0) {
+    & $java -cp "$out;$jsonJar" hosttest.AudioStatsHostTest
     $code = $LASTEXITCODE
 }
 

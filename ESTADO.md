@@ -47,9 +47,23 @@ video del gate POCO del 20 nov. Suite C++: 180 comprobaciones, 0 fallos
   a 16384 ciclos, envelope a 546 a 57344, sweep con overflow apaga el ch1.
   Suite C++: **189 comprobaciones, 0 fallos** (`test_apu` 35 -> 44).
   Gate POCO pendiente: la música suena completa (4 canales) y afinada.
-- Siguiente: slice 2 (audio Java: margen + prioridad + medición) en la
-  sesión del vie 27 nov 06:00; luego slices 3-4, y con la emulación sólida,
-  la spec 019.
+- **Slice 2 — Audio Java (vie 27 nov 06:00, rama `020-slice-2-audio-java`,
+  PR hacia `020-slice-1-apu`).** D-AUD-1: AudioTrack 4x el mínimo con
+  suelo 32 KB (≈ 186 ms, antes ≈ 46 ms), `THREAD_PRIORITY_AUDIO`,
+  contador de underruns con log AUD012 cada 5 s, sueño de 2 ms (antes 5 ms
+  a ciegas) cuando el anillo está vacío. D-AUD-2: anillo APU 4096 -> 8192
+  frames (≈ 186 ms), índices atómicos acquire/release, muestras tiradas
+  contadas (`getDroppedSamples()`, JNI a Java). D-AUD-3: `join(2 s)` en
+  `stopAudioThread()`, retorno de `write()` comprobado y contado. PUMP012
+  ahora lleva los contadores de audio junto al FPS real. Host: `test_apu`
+  44 -> 48 comprobaciones (anillo 8191 frames; 12 frames sin drenar tiran
+  y la cuenta cuadra: conservadas + tiradas = producidas), suite C++
+  **193 comprobaciones, 0 fallos**; Java nuevo `AudioStatsHostTest`.
+  Gate POCO pendiente: 5 min de juego sin cortes (silencedetect sin
+  rachas regulares) y AUD012 con underruns en 0.
+- Siguiente: slice 3 (video: triple búfer + vsync) en la sesión del
+  dom 29 nov 06:00; luego el slice 4, y con la emulación sólida, la
+  spec 019.
 
 ## Estado vivo
 Resumen de `memory/archivo/estado_actual-2026-11.md` + `tasks-2026-11.md`. Solo lo que sigue abierto.

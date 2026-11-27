@@ -222,6 +222,16 @@ public class GameEngine {
     private android.media.AudioTrack audioTrack = null;
     private Thread audioThread = null;
     private volatile boolean audioRunning = false;
+    // Contadores del camino de audio (spec 020 slice 2, D-AUD-1/2/3).
+    private final AudioStats audioStats = new AudioStats();
+
+    /**
+     * Línea de audio para el log PUMP012 de MainActivity: FPS real de la
+     * emu y underruns juntos en una sola línea de diagnóstico.
+     */
+    public String getAudioStatsLine() {
+        return audioStats.format();
+    }
 
     private synchronized void startAudioThread() {
         if (audioRunning) return;
@@ -229,13 +239,22 @@ public class GameEngine {
         audioThread = new Thread(new Runnable() {
             @Override
             public void run() {
+                // D-AUD-1: prioridad de audio para que el hilo no lo
+                // desplace el trabajo de UI ni el de la bomba de frames.
+                android.os.Process.setThreadPriority(
+                        android.os.Process.THREAD_PRIORITY_AUDIO);
                 try {
                     int sampleRate = 44100;
                     int minBufSize = android.media.AudioTrack.getMinBufferSize(
                             sampleRate,
                             android.media.AudioFormat.CHANNEL_OUT_STEREO,
                             android.media.AudioFormat.ENCODING_PCM_16BIT);
-                    int bufSize = Math.max(minBufSize, 4096 * 2);
+                    // D-AUD-1: 4x el mínimo, suelo 32 KB (8192 frames
+                    // estéreo ≈ 186 ms). Antes: max(mínimo, 8192 B) ≈
+                    // 46 ms; un stall de la emu de ~140 ms (anillo APU
+                    // 93 ms + AudioTrack 46 ms) vaciaba todo y sonaba
+                    // un corte. Ahora el colchón aguanta ~370 ms.
+                    int bufSize = Math.max(minBufSize * 4, 32768);
                     audioTrack = new android.media.AudioTrack(
                             android.media.AudioManager.STREAM_MUSIC,
                             sampleRate,
@@ -252,9 +271,29 @@ public class GameEngine {
                         }
                         int count = emulatorBridge.readAudioSamples(sampleBuffer);
                         if (count > 0 && audioTrack != null) {
-                            audioTrack.write(sampleBuffer, 0, count);
+                            // D-AUD-3: el retorno de write() ya no se
+                            // ignora; un error negativo se cuenta y se
+                            // loguea en vez de pasar desapercibido.
+                            int written = audioTrack.write(sampleBuffer, 0, count);
+                            if (written < 0) {
+                                audioStats.noteWriteError();
+                                Log.w(TAG, "AUD012 write() error=" + written);
+                            } else {
+                                audioStats.noteWritten(written);
+                            }
+                            audioStats.noteUnderrunTotal(audioTrack.getUnderrunCount());
+                            audioStats.noteDroppedTotal(
+                                    emulatorBridge.getAudioDroppedSamples());
                         } else {
-                            try { Thread.sleep(5); } catch (InterruptedException ignored) {}
+                            // Sin muestras: el anillo de la APU está
+                            // vacío (la emu va corta). Dormir 2 ms, no
+                            // 5 ms a ciegas: con el colchón nuevo el
+                            // reintento llega antes de que se note.
+                            try { Thread.sleep(2); } catch (InterruptedException ignored) {}
+                        }
+                        if (audioStats.shouldLog(
+                                android.os.SystemClock.elapsedRealtime())) {
+                            Log.i(TAG, "AUD012 " + audioStats.format());
                         }
                     }
                 } catch (Throwable t) {
@@ -276,8 +315,21 @@ public class GameEngine {
     private synchronized void stopAudioThread() {
         audioRunning = false;
         if (audioThread != null) {
-            audioThread.interrupt();
+            Thread t = audioThread;
             audioThread = null;
+            t.interrupt();
+            // D-AUD-3: esperar a que el hilo suelte el AudioTrack antes
+            // de darlo por parado. Antes se ponía a null sin join y
+            // resume() podía arrancar un segundo hilo (y un segundo
+            // AudioTrack) mientras el viejo aún se usaba.
+            try {
+                t.join(2000);
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+            }
+            if (t.isAlive()) {
+                Log.w(TAG, "AUD012 el hilo de audio no terminó en 2 s");
+            }
         }
     }
 

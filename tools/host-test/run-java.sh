@@ -41,6 +41,7 @@ $JAVAC -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$ROOT/app/src/main/java/com/gpsquest96/avatar/AvatarSprites.java" \
     "$ROOT/app/src/main/java/com/gpsquest96/render/TileAtlas.java" \
     "$ROOT/app/src/main/java/com/gpsquest96/emulator/core/EmulationPipeline.java" \
+    "$ROOT/app/src/main/java/com/gpsquest96/emulator/AudioStats.java" \
     "$ROOT/tools/host-test/java/test/hosttest/PuebloHostTest.java" \
     "$ROOT/tools/host-test/java/test/hosttest/GeofenceHostTest.java" \
     "$ROOT/tools/host-test/java/test/com/gpsquest96/gps/OsmClassifyHostTest.java" \
@@ -51,7 +52,8 @@ $JAVAC -encoding UTF-8 -cp "$JSON_JAR" -d "$OUT" \
     "$ROOT/tools/host-test/java/test/hosttest/RouteBundleHostTest.java" \
     "$ROOT/tools/host-test/java/test/hosttest/IllustratedMapHostTest.java" \
     "$ROOT/tools/host-test/java/test/hosttest/SpriteExtractorHostTest.java" \
-    "$ROOT/tools/host-test/java/test/hosttest/AvatarSpritesHostTest.java"
+    "$ROOT/tools/host-test/java/test/hosttest/AvatarSpritesHostTest.java" \
+    "$ROOT/tools/host-test/java/test/hosttest/AudioStatsHostTest.java"
 
 CP="$OUT:$JSON_JAR"
 $JAVA -cp "$CP" hosttest.PuebloHostTest
@@ -65,6 +67,7 @@ $JAVA -cp "$CP" hosttest.RouteBundleHostTest
 $JAVA -cp "$CP" hosttest.IllustratedMapHostTest
 $JAVA -cp "$CP" hosttest.SpriteExtractorHostTest
 $JAVA -cp "$CP" hosttest.AvatarSpritesHostTest
+$JAVA -cp "$CP" hosttest.AudioStatsHostTest
 
 rm -rf "$OUT"
 echo "HOST TESTS JAVA OK"

@@ -63,8 +63,9 @@ void Apu::initialize() {
     frameSequencerCycle_ = 0;
     frameSequencerStep_ = 0;
     sampleCycleAccumulator_ = 0.0;
-    sampleReadIdx_ = 0;
-    sampleWriteIdx_ = 0;
+    sampleReadIdx_.store(0, std::memory_order_relaxed);
+    sampleWriteIdx_.store(0, std::memory_order_relaxed);
+    droppedSamples_.store(0, std::memory_order_relaxed);
 }
 
 void Apu::reset() {
@@ -281,21 +282,34 @@ void Apu::generateSample() {
     int16_t outL = static_cast<int16_t>(std::clamp(sampleL * 0.25 * masterVolL * 32767.0, -32768.0, 32767.0));
     int16_t outR = static_cast<int16_t>(std::clamp(sampleR * 0.25 * masterVolR * 32767.0, -32768.0, 32767.0));
 
-    int nextWrite = (sampleWriteIdx_ + 2) % (BUFFER_SIZE * 2);
-    if (nextWrite != sampleReadIdx_) {
-        sampleBuffer_[sampleWriteIdx_] = outL;
-        sampleBuffer_[sampleWriteIdx_ + 1] = outR;
-        sampleWriteIdx_ = nextWrite;
+    // Anillo (D-AUD-2, spec 020 slice 2): el índice de lectura se carga
+    // con acquire y el de escritura se publica con release, así el hilo
+    // de audio nunca lee una muestra a medio escribir. Si el anillo está
+    // lleno la muestra se TIRA, pero ahora se cuenta (antes en silencio).
+    int readIdx = sampleReadIdx_.load(std::memory_order_acquire);
+    int writeIdx = sampleWriteIdx_.load(std::memory_order_relaxed);
+    int nextWrite = (writeIdx + 2) % (BUFFER_SIZE * 2);
+    if (nextWrite != readIdx) {
+        sampleBuffer_[writeIdx] = outL;
+        sampleBuffer_[writeIdx + 1] = outR;
+        sampleWriteIdx_.store(nextWrite, std::memory_order_release);
+    } else {
+        droppedSamples_.fetch_add(1, std::memory_order_relaxed);
     }
 }
 
 int Apu::readSamples(int16_t* dst, int maxSamples) {
     if (dst == nullptr || maxSamples <= 0) return 0;
     int count = 0;
-    while (sampleReadIdx_ != sampleWriteIdx_ && count < maxSamples) {
-        dst[count++] = sampleBuffer_[sampleReadIdx_];
-        sampleReadIdx_ = (sampleReadIdx_ + 1) % (BUFFER_SIZE * 2);
+    int writeIdx = sampleWriteIdx_.load(std::memory_order_acquire);
+    int readIdx = sampleReadIdx_.load(std::memory_order_relaxed);
+    while (readIdx != writeIdx && count < maxSamples) {
+        dst[count++] = sampleBuffer_[readIdx];
+        readIdx = (readIdx + 1) % (BUFFER_SIZE * 2);
     }
+    // Publicar con release: el hilo de emulación puede reutilizar ya
+    // esos huecos del anillo.
+    sampleReadIdx_.store(readIdx, std::memory_order_release);
     return count;
 }
 

@@ -19,9 +19,10 @@ Arnés de host para verificar lógica que no necesita Android ni POCO. Tiene dos
      estructural de las tablas grass/water de Gen 2, rangos, tabla corrupta y, si
      `GPSQUEST_ROM_GEN2` está definida, las cuatro tablas de Gen 2 y ruta inicial.
      En bases sin `wild_routine.cpp` (antes de la 009 slice 3), `run.sh` lo salta.
-   - `test_apu` — **44 checks** (spec 020, slice 1): tasa de muestras
-     (738/frame), cadencia de drenaje, capacidad del anillo (4095 frames, muestras
-     tiradas sin drenar), frame sequencer (length/envelope/sweep) y los 4 canales
+   - `test_apu` — **48 checks** (spec 020, slices 1-2): tasa de muestras
+     (738/frame), cadencia de drenaje, capacidad del anillo (8191 frames,
+     muestras tiradas sin drenar CONTADAS con `getDroppedSamples`),
+     frame sequencer (length/envelope/sweep) y los 4 canales
      con sus valores hardware: length ch1/ch2 corta a 16384 ciclos, envelope
      ch1 a 546 a 57344, sweep con overflow apaga el ch1, ch3 suena a 546,
      ch4 suena con 81 transiciones/s, timers al disparar, `while` en
@@ -41,8 +42,12 @@ Arnés de host para verificar lógica que no necesita Android ni POCO. Tiene dos
      `building=yes`+`amenity=hospital` → `AMENITY`, monumento `historic=monument` →
      `TOURISM`, POI por delante de terreno, enum de 8 valores alcanzables, `parse()` conserva
      nodos y vías y descarta lo que no tiene tipo.
+   - `AudioStatsHostTest` - **27 checks** (spec 020, slice 2): deltas de
+     underruns y de muestras tiradas (el primer total es la base),
+     retrocesos que no restan, errores de escritura y muestras escritas,
+     intervalo de log de 5 s y formato de la línea AUD012.
 
-**Total C++: 189 checks** (34 + 18 + 51 + 23 + 44 + 19; sin `test_wildtable`,
+**Total C++: 193 checks** (34 + 18 + 51 + 23 + 48 + 19; sin `test_wildtable`,
 que vive en el PR #4 con 71 checks).
 Con `GPSQUEST_ROM_GEN2` definida, `test_wildtable` sube y el total también.
 
